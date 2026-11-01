@@ -1,0 +1,12 @@
+const router = require('express').Router();
+const c = require('../controllers/taskController');
+const validate = require('../middleware/validate');
+const { protect } = require('../middleware/authMiddleware');
+router.use(protect);
+router.post('/', validate({ body: c.createSchema }), c.create);
+router.get('/', validate({ query: c.listSchema }), c.list);
+router.get('/:id', c.get);
+router.patch('/:id', validate({ body: c.updateSchema }), c.update);
+router.put('/:id', validate({ body: c.updateSchema }), c.update);
+router.delete('/:id', c.remove);
+module.exports = router;
