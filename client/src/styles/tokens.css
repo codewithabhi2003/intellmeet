@@ -1,0 +1,28 @@
+/* Design tokens. Values follow the spec; text/button tokens marked (AA) are added so every text pair reaches WCAG AA.
+   The spec's --text-muted (3.45:1 dark, 2.75:1 light) and white-on-#6366F1 (4.47:1) fall short of 4.5:1. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-base:#FFFFFF; --bg-surface:#F6F7FB; --bg-card:#FFFFFF; --bg-input:#EEF0F6; --bg-elevated:#FFFFFF;
+  --accent:#6366F1; --accent-dark:#4F46E5; --accent-soft:rgba(99,102,241,.10);
+  --accent-cyan:#06B6D4; --accent-green:#10B981; --accent-yellow:#F59E0B; --accent-red:#EF4444;
+  --text-primary:#0B1020; --text-secondary:#475069; --text-muted:#5F6781; /* (AA) muted: spec #8A91A8 */
+  --border:#E4E7F0; --border-strong:#CDD2E1;
+  --shadow-sm:0 1px 3px rgba(11,16,32,.06); --shadow-md:0 6px 20px rgba(11,16,32,.08);
+  --shadow-lg:0 16px 48px rgba(11,16,32,.12); --shadow-glow:0 0 28px rgba(99,102,241,.22);
+  /* (AA) text-safe variants */
+  --accent-text:#4F46E5; --cyan-text:#0E7490; --green-text:#047857; --yellow-text:#92400E; --red-text:#B91C1C;
+  --btn-bg:#4F46E5; --btn-bg-hover:#4338CA; --on-accent:#FFFFFF;
+}
+:root[data-theme="dark"] {                       /* COMPLETE BLACK */
+  color-scheme: dark;
+  --bg-base:#000000; --bg-surface:#050505; --bg-card:#0A0A0A; --bg-input:#111111; --bg-elevated:#151515;
+  --accent:#818CF8; --accent-dark:#6366F1; --accent-soft:rgba(129,140,248,.14);
+  --accent-cyan:#22D3EE; --accent-green:#34D399; --accent-yellow:#FBBF24; --accent-red:#F87171;
+  --text-primary:#F5F6FA; --text-secondary:#A1A6B8; --text-muted:#81879B; /* (AA) muted: spec #666B7D */
+  --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.16);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.6); --shadow-md:0 8px 24px rgba(0,0,0,.7);
+  --shadow-lg:0 20px 56px rgba(0,0,0,.8); --shadow-glow:0 0 32px rgba(129,140,248,.28);
+  --accent-text:#818CF8; --cyan-text:#22D3EE; --green-text:#34D399; --yellow-text:#FBBF24; --red-text:#F87171;
+  --btn-bg:#4F46E5; --btn-bg-hover:#4338CA; --on-accent:#FFFFFF;
+}
+:root { --ease-out:cubic-bezier(.22,1,.36,1); --dur-fast:150ms; --dur-base:250ms; --dur-slow:400ms; }
