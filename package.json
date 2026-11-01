@@ -1,0 +1,12 @@
+{
+  "name": "intellmeet",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI meeting & collaboration platform",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "test": "npm --prefix server test && npm --prefix client test",
+    "lint": "npm --prefix server run lint && npm --prefix client run lint",
+    "build": "npm --prefix client run build"
+  }
+}
