@@ -1,0 +1,11 @@
+const router = require('express').Router();
+const c = require('../controllers/aiController');
+const validate = require('../middleware/validate');
+const { protect } = require('../middleware/authMiddleware');
+const meetingAccess = require('../middleware/meetingAccess');
+const aiRateLimiter = require('../middleware/aiRateLimiter');
+const { requireFeature } = require('../config/aiConfig');
+router.post('/:id/translations', protect, validate({ body: c.translateSchema }), meetingAccess, requireFeature('language'), aiRateLimiter, c.requestTranslation);
+router.get('/:id/translations', protect, meetingAccess, c.listTranslations);
+router.get('/:id/translations/:lang', protect, validate({ params: c.langParam }), meetingAccess, c.getTranslation);
+module.exports = router;
