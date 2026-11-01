@@ -23,7 +23,15 @@ Thumbs.db
 # Test and coverage output
 coverage/
 
+# Private user uploads
+server/storage/
+
 # Temporary files
 *.tmp
 *.temp
 *.swp
+
+# Local editor and environment files
+.vscode/
+.idea/
+*.bak
