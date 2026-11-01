@@ -1,0 +1,11 @@
+import { api } from './api';
+const m = (id) => `/meetings/${id}`;
+export const startTranscription = (id, body = {}) => api.post(`${m(id)}/transcription`, body).then((r) => r.data);
+export const retryTranscription = (id, body = {}) => api.post(`${m(id)}/transcription/retry`, body).then((r) => r.data);
+export const transcriptStatus = (id) => api.get(`${m(id)}/transcript/status`).then((r) => r.data.transcript);
+export const getTranscript = (id, params) => api.get(`${m(id)}/transcript`, { params }).then((r) => r.data);
+export const requestTranslation = (id, targetLanguage) => api.post(`${m(id)}/translations`, { targetLanguage }).then((r) => r.data);
+export const listTranslations = (id) => api.get(`${m(id)}/translations`).then((r) => r.data.translations);
+export const getTranslation = (id, lang) => api.get(`${m(id)}/translations/${lang}`).then((r) => r.data.translation);
+export const requestSummary = (id, body) => api.post(`${m(id)}/summary`, body).then((r) => r.data);
+export const getSummary = (id, language) => api.get(`${m(id)}/summary`, { params: language ? { language } : {} }).then((r) => r.data);

@@ -1,0 +1,12 @@
+/* Only transform + opacity are animated. */
+@keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
+@keyframes segment-pulse{0%{background-color:var(--accent-soft)}100%{background-color:transparent}}
+.skeleton{position:relative;overflow:hidden;background:var(--bg-input);border-radius:12px}
+.skeleton::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--border-strong),transparent);animation:shimmer 1.4s infinite}
+.dot-pulse{animation:pulse-dot 1.2s ease-in-out infinite}
+.segment-highlight{animation:segment-pulse 1.8s var(--ease-out) 1}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;scroll-behavior:auto !important}
+  .bento-tile:hover{transform:none}
+}

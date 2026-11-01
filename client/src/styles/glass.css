@@ -1,0 +1,267 @@
+/* =====================================================================
+   Glassmorphism layer for the IntellMeet landing page.
+   Everything is scoped under `.lp-glass` (see GlassPage.jsx), so it only restyles the landing page and
+   disappears completely if you remove the wrapper. It reuses your existing class names — every element
+   that used `bg-card` (cards, frames, chips, badge, CTA) simply becomes frosted glass.
+   ===================================================================== */
+
+.lp-glass {
+  position: relative;
+  isolation: isolate; /* the fixed aurora (z-index -1) paints above the body background, below the content */
+  --gl-blur: 18px;
+}
+
+/* ---------- theme tokens (picked by GlassPage from your existing theme) ---------- */
+.lp-glass[data-mode='dark'] {
+  --gl-bg: rgba(10, 10, 24, 0.5);
+  --gl-bg-strong: rgba(10, 10, 24, 0.7);
+  --gl-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.02) 55%);
+  --gl-border: rgba(255, 255, 255, 0.17);
+  --gl-hi: rgba(255, 255, 255, 0.26);
+  --gl-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.7);
+  --gl-sat: 1.3;
+  --gl-nav-veil: rgba(8, 8, 14, 0.82);
+  --gl-btn-border: rgba(255, 255, 255, 0.34);
+  --gl-soft: #e4e6f1; /* secondary text on the aurora */
+  --gl-muted: #c6cadb; /* tertiary text on the aurora */
+  --au-op: 0.42;
+  --au-wave: rgba(196, 204, 255, 0.55);
+}
+.lp-glass[data-mode='light'] {
+  --gl-bg: rgba(255, 255, 255, 0.62);
+  --gl-bg-strong: rgba(255, 255, 255, 0.82);
+  --gl-sheen: linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.08) 60%);
+  --gl-border: rgba(255, 255, 255, 0.9);
+  --gl-hi: rgba(255, 255, 255, 0.98);
+  --gl-shadow: 0 0 0 1px rgba(30, 27, 75, 0.07), 0 24px 56px -30px rgba(67, 56, 202, 0.45);
+  --gl-sat: 1.5;
+  --gl-nav-veil: rgba(250, 250, 252, 0.84);
+  --gl-btn-border: rgba(30, 27, 75, 0.28);
+  --gl-soft: #2b3044;
+  --gl-muted: #454b62;
+  --au-op: 0.5;
+  --au-wave: rgba(79, 70, 229, 0.4);
+}
+
+/* =====================================================================
+   Aurora (fixed background)
+   ===================================================================== */
+.lp-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  contain: layout paint;
+}
+.lp-aurora__orbs {
+  position: absolute;
+  inset: 0;
+}
+.lp-au__orb {
+  position: absolute;
+  left: calc(var(--s) * -0.5);
+  top: calc(var(--s) * -0.5);
+  width: var(--s);
+  height: var(--s);
+  will-change: transform;
+}
+.lp-au__orb--1 { --s: 86vmax; --c: #6366f1; --d: 26s; }
+.lp-au__orb--2 { --s: 74vmax; --c: #22d3ee; --d: 31s; }
+.lp-au__orb--3 { --s: 80vmax; --c: #a855f7; --d: 36s; }
+.lp-au__orb--4 { --s: 56vmax; --c: #3b82f6; --d: 22s; }
+
+.lp-au__blob {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    var(--c) 0%,
+    color-mix(in srgb, var(--c) 45%, transparent) 42%,
+    transparent 100%
+  );
+  opacity: var(--au-op);
+  animation: lp-au-drift var(--d) ease-in-out infinite alternate;
+}
+.lp-au__orb--2 .lp-au__blob { animation-direction: alternate-reverse; }
+.lp-au__orb--4 .lp-au__blob { animation-direction: alternate-reverse; }
+
+@keyframes lp-au-drift {
+  from { transform: translate3d(-3vw, 2vh, 0) scale(1); }
+  to   { transform: translate3d(4vw, -3vh, 0) scale(1.1); }
+}
+
+/* the "voice" ribbon */
+.lp-aurora__wave {
+  position: absolute;
+  left: 0;
+  top: 50vh;
+  width: 260vw;
+  height: 38vh;
+  color: var(--au-wave);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  will-change: transform;
+}
+
+/* film grain (stops colour banding behind the glass) */
+.lp-aurora__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+.lp-glass[data-mode='light'] .lp-aurora__grain {
+  opacity: 0.05;
+  filter: invert(1);
+}
+
+.lp-aurora.is-still .lp-au__blob {
+  animation: none;
+}
+
+@media (max-width: 640px) {
+  .lp-au__orb--1 { --s: 120vmax; }
+  .lp-au__orb--2 { --s: 100vmax; }
+  .lp-au__orb--3 { --s: 110vmax; }
+  .lp-au__orb--4 { --s: 80vmax; }
+  .lp-aurora__wave { top: 52vh; height: 30vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-au__blob {
+    animation: none;
+  }
+}
+
+/* =====================================================================
+   Glass surfaces — everything that used `bg-card`
+   ===================================================================== */
+.lp-glass .bg-card {
+  background-color: var(--gl-bg) !important;
+  background-image: var(--gl-sheen);
+  border-color: var(--gl-border) !important;
+  -webkit-backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-sat));
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-sat));
+  box-shadow: inset 0 1px 0 var(--gl-hi), var(--gl-shadow);
+}
+.lp-glass .bg-surface {
+  background-color: transparent !important;
+}
+.lp-glass .lp-section {
+  border-color: transparent !important;
+}
+
+/* text that sits directly on the aurora (not inside a card): a little stronger than the normal theme greys */
+.lp-glass .text-ink-soft,
+.lp-glass .lp-fbullets li {
+  color: var(--gl-soft);
+}
+.lp-glass .text-ink-muted {
+  color: var(--gl-muted);
+}
+
+/* secondary buttons: a clearly visible edge on any background colour */
+.lp-glass .btn-secondary {
+  background: var(--gl-bg);
+  border-color: var(--gl-btn-border) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(var(--gl-sat));
+  backdrop-filter: blur(12px) saturate(var(--gl-sat));
+  box-shadow: inset 0 1px 0 var(--gl-hi);
+}
+
+/* hero: the aurora replaces the old static glow + local orbs */
+.lp-glass .lp-hero-glow,
+.lp-glass .lp-orb {
+  display: none;
+}
+.lp-glass .lp-frame.bg-card {
+  box-shadow:
+    inset 0 1px 0 var(--gl-hi),
+    var(--gl-shadow),
+    0 0 80px -26px color-mix(in srgb, var(--lp-accent) 55%, transparent);
+}
+.lp-glass .lp-chip.bg-card {
+  box-shadow: inset 0 1px 0 var(--gl-hi), 0 12px 30px -16px rgba(0, 0, 0, 0.45);
+}
+
+/* text belt keeps the black/white border you asked for; only the fill becomes glass */
+.lp-glass .lp-belt__frame {
+  background: var(--gl-bg);
+  -webkit-backdrop-filter: blur(14px) saturate(var(--gl-sat));
+  backdrop-filter: blur(14px) saturate(var(--gl-sat));
+  box-shadow: inset 0 1px 0 var(--gl-hi);
+}
+
+/* features: tab capsule + panel */
+.lp-glass .lp-ftabs {
+  background: var(--gl-bg);
+  border: 1px solid var(--gl-border);
+  border-radius: 20px;
+  padding: 0.4rem;
+  margin-inline: 0;
+  -webkit-backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-sat));
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-sat));
+  box-shadow: inset 0 1px 0 var(--gl-hi), var(--gl-shadow);
+}
+@media (min-width: 900px) {
+  .lp-glass .lp-ftabs {
+    width: fit-content;
+    max-width: 100%;
+    margin-inline: auto;
+  }
+}
+.lp-glass .lp-ftab {
+  color: var(--gl-soft);
+}
+.lp-glass .lp-ftab:hover {
+  color: var(--lp-ink);
+}
+.lp-glass .lp-ftab[aria-selected='true'] {
+  background: var(--gl-bg-strong);
+  border-color: var(--gl-border);
+  box-shadow: inset 0 1px 0 var(--gl-hi), 0 8px 26px -10px color-mix(in srgb, var(--lp-accent) 70%, transparent);
+}
+.lp-glass .lp-fpanel {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--lp-accent) 14%, transparent), transparent 55%),
+    var(--gl-bg);
+  border-color: var(--gl-border);
+  -webkit-backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-sat));
+  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-sat));
+  box-shadow: inset 0 1px 0 var(--gl-hi), var(--gl-shadow);
+}
+
+/* final CTA keeps its own coloured inner glow on top of the glass */
+.lp-glass .lp-cta.bg-card {
+  box-shadow: inset 0 1px 0 var(--gl-hi), var(--gl-shadow), 0 0 90px -34px color-mix(in srgb, var(--lp-violet) 60%, transparent);
+}
+
+/* nav: invisible over the hero (unchanged), frosted glass once the hero has scrolled away */
+.lp-glass .lp-nav__veil {
+  background: var(--gl-nav-veil) !important;
+}
+.lp-glass .lp-nav__bar {
+  background: var(--gl-bg-strong) !important;
+  border-bottom-color: var(--gl-border) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(var(--gl-sat));
+  backdrop-filter: blur(22px) saturate(var(--gl-sat));
+}
+.lp-glass #landing-mobile-menu {
+  background: var(--gl-bg-strong) !important;
+  border-color: var(--gl-border) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(var(--gl-sat));
+  backdrop-filter: blur(22px) saturate(var(--gl-sat));
+}
+.lp-glass .lp-footer {
+  background: var(--gl-bg);
+  border-color: var(--gl-border);
+  -webkit-backdrop-filter: blur(var(--gl-blur));
+  backdrop-filter: blur(var(--gl-blur));
+}
+
+/* Browsers without backdrop-filter: fall back to near-solid panels so text stays readable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .lp-glass[data-mode='dark'] { --gl-bg: rgba(22, 22, 36, 0.86); }
+  .lp-glass[data-mode='light'] { --gl-bg: rgba(255, 255, 255, 0.92); }
+}

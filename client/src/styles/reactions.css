@@ -1,0 +1,187 @@
+/*
+  Reactions — the picker tray (ReactionButton.jsx) and the floating emoji (ReactionLayer.jsx).
+  Only transform and opacity are ever animated, so every frame stays on the GPU even with a dozen reactions in flight.
+  Colours come from the app's own theme variables, so light and dark both work.
+*/
+
+/* ───────────────────────────── floating reactions ───────────────────────────── */
+
+/*
+  Four nested layers, each doing ONE job, so the motions multiply into a natural float instead of fighting each other:
+    .rx          rises + fades (travel distance, duration and start point are set per reaction from ReactionLayer.jsx)
+    .rx__sway    drifts left/right on a slow sine
+    .rx__pop     springs in with a little overshoot
+    .rx__emoji   tilts a few degrees with the sway
+  The sender's name sits under the emoji and fades out first, so the top of the flight is just the emoji.
+*/
+.rx {
+  position: absolute;
+  width: 0;                          /* the element IS the lane: children centre on it and may overflow both sides */
+  display: flex;
+  justify-content: center;
+  opacity: 0;                        /* if animations are ever disabled, nothing is left stuck on screen */
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation:
+    rx-rise var(--rx-dur, 4s) cubic-bezier(0.4, 0.5, 0.65, 0.9) both,
+    rx-fade var(--rx-dur, 4s) linear both;
+}
+
+@keyframes rx-rise {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, calc(var(--rx-rise, 300px) * -1), 0); }
+}
+
+/* quick fade-in, long clear middle, then a slow dissolve over the last ~40% of the flight */
+@keyframes rx-fade {
+  0%   { opacity: 0; }
+  6%   { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.rx__sway {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: rx-sway var(--rx-sway, 2.8s) ease-in-out var(--rx-phase, 0s) infinite;
+}
+
+@keyframes rx-sway {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  25%      { transform: translate3d(var(--rx-amp, 14px), 0, 0); }
+  75%      { transform: translate3d(calc(var(--rx-amp, 14px) * -1), 0, 0); }
+}
+
+.rx__pop {
+  display: block;
+  transform-origin: 50% 75%;
+  animation: rx-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;   /* y > 1 = the overshoot */
+}
+
+@keyframes rx-pop {
+  from { transform: scale(0.3); }
+  to   { transform: scale(1); }
+}
+
+.rx__emoji {
+  display: block;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: var(--rx-size, 44px);
+  line-height: 1;
+  user-select: none;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
+  animation: rx-tilt var(--rx-sway, 2.8s) ease-in-out var(--rx-phase, 0s) infinite;
+}
+
+@keyframes rx-tilt {
+  0%, 100% { transform: rotate(0deg); }
+  25%      { transform: rotate(5deg); }
+  75%      { transform: rotate(-5deg); }
+}
+
+.rx__name {
+  margin-top: 6px;
+  max-width: 112px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(12, 12, 18, 0.7);
+  color: #fff;
+  font: 500 11px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: rx-name var(--rx-dur, 4s) linear both;
+}
+
+@keyframes rx-name {
+  0%   { opacity: 0; transform: translate3d(0, 4px, 0); }
+  8%   { opacity: 1; transform: translate3d(0, 0, 0); }
+  38%  { opacity: 1; }
+  58%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* Reduced motion: nothing travels. The emoji fades in where it is, stays for a moment, fades out. */
+@media (prefers-reduced-motion: reduce) {
+  .rx { animation: rx-still 1.8s ease both; will-change: auto; }
+  .rx__sway, .rx__pop, .rx__emoji { animation: none; }
+  .rx__name { animation: none; }
+}
+
+@keyframes rx-still {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ───────────────────────────── picker tray ───────────────────────────── */
+
+/* Rendered in a portal on <body> with position: fixed, so a scrolling or clipping control bar can never cut it off. */
+.rx-tray {
+  position: fixed;
+  z-index: 60;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 22px;
+  background: var(--bg-card);
+  box-shadow: 0 14px 36px rgba(8, 8, 20, 0.22), 0 2px 8px rgba(8, 8, 20, 0.1);
+  transform-origin: var(--rx-origin, 50% 100%);
+  animation: rx-tray-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes rx-tray-in {
+  from { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.94); }
+  to   { opacity: 1; transform: none; }
+}
+
+.rx-tray__grid {
+  display: grid;
+  gap: 2px;
+  justify-content: center;
+}
+
+/* little pointer that stays aimed at the Reactions button even when the tray is pushed in from a screen edge */
+.rx-tray__caret {
+  position: absolute;
+  bottom: -6px;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  border-right: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+  border-bottom-right-radius: 3px;
+  background: var(--bg-card);
+  transform: rotate(45deg);
+}
+
+.rx-pick {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: 26px;
+  line-height: 1;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .rx-pick:hover {
+    background: var(--bg-input);
+    transform: translate3d(0, -3px, 0) scale(1.2);
+  }
+}
+
+.rx-pick:active { transform: scale(0.88); }
+.rx-pick:focus-visible { outline: 2px solid var(--btn-bg); outline-offset: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rx-tray { animation: none; }
+  .rx-pick { transition: none; }
+  .rx-pick:hover, .rx-pick:active { transform: none; }
+}
