@@ -1,0 +1,11 @@
+const router = require('express').Router();
+const c = require('../controllers/workspaceController');
+const validate = require('../middleware/validate');
+const { protect } = require('../middleware/authMiddleware');
+const { workspaceMember } = require('../middleware/roleMiddleware');
+router.use(protect);
+router.post('/', validate({ body: c.createSchema }), c.create);
+router.get('/', c.list);
+router.post('/:id/members', workspaceMember('owner', 'admin'), validate({ body: c.addMemberSchema }), c.addMember);
+router.delete('/:id/members/:userId', workspaceMember('owner', 'admin'), c.removeMember);
+module.exports = router;
