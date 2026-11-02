@@ -4,6 +4,9 @@ const crypto = require('crypto');
 const asyncHandler = require('express-async-handler');
 const { z } = require('zod');
 const User = require('../models/User');
+const SecurityEvent = require('../models/SecurityEvent');
+const security = require('../services/security');
+const { setAuthCookie } = require('../utils/generateToken');
 const langs = require('../services/ai/languages');
 
 const code = langs.codeSchema().nullable();
@@ -14,6 +17,7 @@ exports.updateSchema = z.object({
   email: z.string().trim().email().max(200).optional(),
   currentPassword: z.string().min(1).max(128).optional(),
 }).strict();
+exports.passwordSchema = z.object({ currentPassword: z.string().min(1).max(128), newPassword: z.string().min(8).max(128) }).strict();
 exports.langPrefSchema = z.object({ transcriptLanguage: code.optional(), summaryLanguage: code.optional(), searchAnswerLanguage: code.optional() }).strict();
 exports.idParam = z.object({ id: oid });
 
@@ -33,6 +37,7 @@ exports.updateMe = asyncHandler(async (req, res) => {
     if (!(await withPw.matchPassword(currentPassword))) return res.status(403).json({ success: false, code: 'WRONG_PASSWORD', message: 'Your current password is incorrect.' });
     if (await User.exists({ email: next, _id: { $ne: req.user._id } })) return res.status(409).json({ success: false, code: 'DUPLICATE', message: 'That email is already in use.' });
     req.user.email = next;
+    await security.recordEvent(req.user._id, 'email_changed', req);
   }
   if (name) req.user.name = name;
   await req.user.save();
@@ -79,6 +84,34 @@ exports.getAvatar = asyncHandler(async (req, res) => {
   res.set({ 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'private, max-age=86400',
     'Cross-Origin-Resource-Policy': 'same-site' });   // helmet's default (same-origin) would block <img> loads from the client's port
   res.sendFile(path.join(avatarDir(), path.basename(u.avatarFile)));
+});
+
+// Changing the password signs out every other device: all older tokens stop working and live sockets are cut; this device gets a fresh session.
+// The current password is required (so a stolen session alone can't do it) and wrong guesses count toward the same lockout as sign-in.
+exports.changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const lock = await security.lockStatus(req.user.email);
+  if (lock.locked) { res.set('Retry-After', String(lock.retryAfterSec)); return res.status(429).json({ success: false, code: 'TOO_MANY_ATTEMPTS', message: 'Too many attempts. Please try again in a few minutes.' }); }
+  const u = await User.findById(req.user._id).select('+password');
+  if (!(await u.matchPassword(currentPassword))) {
+    await security.recordFailure(u.email);
+    await security.recordEvent(u._id, 'password_change_failed', req);
+    return res.status(403).json({ success: false, code: 'WRONG_PASSWORD', message: 'Your current password is incorrect.' });
+  }
+  if (currentPassword === newPassword) return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', message: 'Choose a password you have not used just now.' });
+  u.password = newPassword;                                       // hashed by the model's pre-save hook
+  u.tokenVersion = (u.tokenVersion || 0) + 1;
+  await u.save();
+  await security.clearFailures(u.email);
+  await security.recordEvent(u._id, 'password_changed', req);
+  require('../sockets').revokeUserSockets(u._id);
+  const token = setAuthCookie(res, u);
+  res.json({ success: true, token, user: pub(u) });
+});
+
+exports.securityEvents = asyncHandler(async (req, res) => {
+  const rows = await SecurityEvent.find({ userId: req.user._id }).sort({ createdAt: -1 }).limit(50).lean();   // your own events only
+  res.json({ success: true, events: rows.map((e) => ({ id: e._id, type: e.type, ip: e.ip, userAgent: e.userAgent, createdAt: e.createdAt })) });
 });
 
 exports.getLang = (req, res) => res.json({ success: true, languagePreferences: req.user.languagePreferences });

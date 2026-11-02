@@ -14,7 +14,7 @@ import { DEFAULT_LANGUAGE_SETTINGS, buildCreatePayload, isEmail, parseEmails } f
 export default function CreateMeeting() {
   const navigate = useNavigate();
   const [ref, setRef] = useState({ workspaces: null, languages: null, error: '' });
-  const [form, setForm] = useState({ title: '', description: '', mode: 'now', scheduledAt: '', workspaceId: '', emails: '', waitingRoom: false, languageSettings: DEFAULT_LANGUAGE_SETTINGS });
+  const [form, setForm] = useState({ title: '', description: '', mode: 'now', scheduledAt: '', workspaceId: '', emails: '', waitingRoom: false, visibility: 'private', languageSettings: DEFAULT_LANGUAGE_SETTINGS });
   const [roomCode] = useState(generateRoomCode);          // made now, so the link and code can be copied before the meeting exists
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -72,8 +72,17 @@ export default function CreateMeeting() {
           <div>
             <label className="label" htmlFor="ws">Workspace</label>
             <select id="ws" className="field" value={form.workspaceId} onChange={set('workspaceId')}>{ref.workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
-            <p className="mt-1 text-xs text-ink-muted">Everyone in the workspace can see this meeting and its records.</p>
-          </div>
+            </div>
+
+          <fieldset className="space-y-2">
+            <legend className="label">Who can see this meeting's transcript and summary?</legend>
+            {[['private', 'Only me and the people I invite', 'Other workspace members cannot open it, search it, or see its action items.'], ['workspace', 'Everyone in the workspace', 'Every member of the workspace can open the meeting and its records.']].map(([v, title, hint]) => (
+              <label key={v} className={`flex min-h-[44px] cursor-pointer items-start gap-3 rounded-xl border p-3 ${form.visibility === v ? 'border-[var(--accent)] bg-accent-soft' : 'border-line'}`}>
+                <input type="radio" name="visibility" value={v} className="mt-1 h-4 w-4 accent-[var(--btn-bg)]" checked={form.visibility === v} onChange={() => setForm((f) => ({ ...f, visibility: v }))} />
+                <span><span className="block text-sm font-medium text-ink">{title}</span><span className="block text-xs text-ink-muted">{hint}</span></span>
+              </label>
+            ))}
+          </fieldset>
           <div>
             <label className="label" htmlFor="inv">Invite by email (optional)</label>
             <textarea id="inv" rows={2} className="field" placeholder="name@company.com, other@company.com" value={form.emails} onChange={set('emails')} aria-invalid={!!badEmails.length} aria-describedby="inv-h" />

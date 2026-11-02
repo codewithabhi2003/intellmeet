@@ -7,11 +7,11 @@
 const { z } = require('zod');
 const Meeting = require('../models/Meeting');
 const presence = require('./presence');
-
+ 
 const target = z.object({ socketId: z.string().min(1).max(64) }).strict();
 const muteSchema = z.object({ socketId: z.string().min(1).max(64), kind: z.enum(['audio', 'video']) }).strict();
 const muteAllSchema = z.object({ kind: z.literal('audio') }).strict();
-
+ 
 const asHost = async (socket) => {
   const { meetingId, roomCode } = socket.data;
   if (!meetingId || !roomCode || !presence.rooms.get(roomCode)?.has(socket.id)) return null;
@@ -23,7 +23,7 @@ const guard = (fn) => async (payload, ack = () => {}) => {
   try { await fn(payload || {}, ack); } catch (e) { ack({ ok: false, code: e.name === 'ZodError' ? 'VALIDATION_ERROR' : 'SERVER_ERROR', message: 'That action failed.' }); }
 };
 const NOT_HOST = 'Only the host can do that.';
-
+ 
 exports.register = (io, socket) => {
   socket.on('host:mute', guard(async (p, ack) => {
     const { socketId, kind } = muteSchema.parse(p);
@@ -32,7 +32,7 @@ exports.register = (io, socket) => {
     io.to(socketId).emit('host:force-mute', { kind });
     ack({ ok: true });
   }));
-
+ 
   socket.on('host:mute-all', guard(async (p, ack) => {
     const { kind } = muteAllSchema.parse(p);
     const m = await asHost(socket); if (!m) return fail(ack, 'FORBIDDEN', NOT_HOST);
@@ -40,7 +40,7 @@ exports.register = (io, socket) => {
     presence.rooms.get(m.roomCode).forEach((peer) => { if (peer.userId !== String(m.hostId)) { io.to(peer.socketId).emit('host:force-mute', { kind }); count += 1; } });
     ack({ ok: true, count });
   }));
-
+ 
   socket.on('host:remove', guard(async (p, ack) => {
     const { socketId } = target.parse(p);
     const m = await asHost(socket); if (!m) return fail(ack, 'FORBIDDEN', NOT_HOST);
@@ -56,7 +56,7 @@ exports.register = (io, socket) => {
     }
     ack({ ok: true });
   }));
-
+ 
   socket.on('lobby:admit', guard(async (p, ack) => {
     const { socketId } = target.parse(p);
     const m = await asHost(socket); if (!m) return fail(ack, 'FORBIDDEN', NOT_HOST);
@@ -70,7 +70,7 @@ exports.register = (io, socket) => {
     presence.pushLobby(io, m.roomCode, m.hostId);
     ack({ ok: true });
   }));
-
+ 
   socket.on('lobby:deny', guard(async (p, ack) => {
     const { socketId } = target.parse(p);
     const m = await asHost(socket); if (!m) return fail(ack, 'FORBIDDEN', NOT_HOST);
@@ -83,3 +83,4 @@ exports.register = (io, socket) => {
     ack({ ok: true });
   }));
 };
+ 

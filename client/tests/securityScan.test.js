@@ -20,8 +20,10 @@ describe('client source', () => {
     expect(text(path.resolve(process.cwd(), '.env.example'))).not.toMatch(/KEY|SECRET/i);
   });
   it('browser storage holds only the theme choice; the session lives in the httpOnly cookie', () => {
-    const using = offenders(/localStorage|sessionStorage/).sort();
-    expect(using).toEqual(['src/context/ThemeContext.jsx']);
+    const using = offenders(/localStorage|sessionStorage/)
+  .map((file) => file.replace(/\\/g, '/'))
+  .sort();
+expect(using).toEqual(['src/context/ThemeContext.jsx']);
     expect(offenders(/Authorization|Bearer /)).toEqual([]);
   });
   it('makes no end-to-end-encryption claims (an explicit "not end-to-end encrypted" disclaimer is fine)', () => { expect(offenders(/(?<!not )(?<!no )end-to-end|e2ee|end to end encrypt/i)).toEqual([]); });

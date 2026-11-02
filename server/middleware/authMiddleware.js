@@ -1,15 +1,11 @@
-const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
-const User = require('../models/User');
+const { userFromToken } = require('../utils/session');
 exports.protect = asyncHandler(async (req, res, next) => {
   const h = req.headers.authorization;
   const token = req.cookies?.token || (h && h.startsWith('Bearer ') ? h.slice(7) : null);
   if (!token) return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Not authenticated.' });
-  let payload;
-  try { payload = jwt.verify(token, process.env.JWT_SECRET); }
-  catch { return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Session expired.' }); }
-  const user = await User.findById(payload.id);
-  if (!user || !user.isActive) return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Not authenticated.' });
+  const user = await userFromToken(token);                        // also rejects tokens revoked by "log out of all devices" / a password change
+  if (!user) return res.status(401).json({ success: false, code: 'UNAUTHORIZED', message: 'Session expired. Please sign in again.' });
   req.user = user;
   next();
 });

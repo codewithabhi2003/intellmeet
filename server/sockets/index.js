@@ -1,7 +1,6 @@
 const { Server } = require('socket.io');
-const jwt = require('jsonwebtoken');
 const cookie = require('cookie');
-const User = require('../models/User');
+const { userFromToken } = require('../utils/session');
 const corsOptions = require('../config/cors');
 
 let io = null;
@@ -11,11 +10,10 @@ exports.init = (server) => {
   io.use(async (socket, next) => {
     try {
       const raw = socket.handshake.auth?.token || cookie.parse(socket.handshake.headers.cookie || '').token;
-      if (!raw) return next(new Error('unauthorized'));
-      const { id } = jwt.verify(raw, process.env.JWT_SECRET);
-      const user = await User.findById(id);
-      if (!user || !user.isActive) return next(new Error('unauthorized'));
+      const user = await userFromToken(raw);                        // same rules as HTTP, including revoked sessions
+      if (!user) return next(new Error('unauthorized'));
       socket.user = user;
+      socket.join(`user:${user._id}`);                              // lets us cut every live connection of this user when their sessions are revoked
       next();
     } catch { next(new Error('unauthorized')); }
   });
@@ -36,4 +34,6 @@ exports.closeLobby = (roomCode, meetingId) => {
   lobbies.get(roomCode)?.forEach((w) => io?.to(w.socketId).emit('meeting:ended', { meetingId: String(meetingId) }));
   lobbies.delete(roomCode);
 };
+// "Log out of all devices" / password change: drop every live socket of that user right away.
+exports.revokeUserSockets = (userId) => { io?.in(`user:${userId}`).disconnectSockets(true); };
 exports.getIO = () => io;

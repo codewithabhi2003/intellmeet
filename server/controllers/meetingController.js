@@ -27,11 +27,13 @@ exports.createSchema = z.object({
   // The link/code can be shown BEFORE the meeting exists, so the browser generates the code (12 url-safe chars, same shape as the server's own).
   roomCode: z.string().regex(/^[A-Za-z0-9_-]{12}$/).optional(),
   waitingRoom: z.boolean().optional(),
+  visibility: z.enum(['workspace', 'private']).optional(),
 }).strict();
 exports.patchSchema = z.object({
   title: z.string().trim().min(1).max(140).optional(), description: z.string().max(2000).optional(),
   scheduledAt: z.coerce.date().optional(), status: z.literal('cancelled').optional(),
   invitedEmails: z.array(z.string().trim().email()).max(50).optional(),
+  visibility: z.enum(['workspace', 'private']).optional(),
 }).strict();
 exports.listSchema = z.object({
   page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(50).default(20),
@@ -45,7 +47,7 @@ const view = (m) => ({
   id: m._id, title: m.title, description: m.description, hostId: m.hostId, workspaceId: m.workspaceId,
   scheduledAt: m.scheduledAt, startedAt: m.startedAt, endedAt: m.endedAt, status: m.status, roomCode: m.roomCode,
   participants: m.participants, invitedUserIds: m.invitedUserIds, languageSettings: m.languageSettings,
-  waitingRoom: !!m.waitingRoom, recordingConsent: { required: m.recordingConsent?.required, acceptedBy: m.recordingConsent?.acceptedBy }, createdAt: m.createdAt,
+  visibility: m.visibility || 'workspace', waitingRoom: !!m.waitingRoom, recordingConsent: { required: m.recordingConsent?.required, acceptedBy: m.recordingConsent?.acceptedBy }, createdAt: m.createdAt,
 });
 exports.view = view;
 
@@ -77,6 +79,7 @@ exports.create = asyncHandler(async (req, res) => {
     languageSettings: b.languageSettings,
     roomCode: b.roomCode,                          // undefined -> the model generates one
     waitingRoom: !!b.waitingRoom,
+    visibility: b.visibility || 'private',          // secure by default: only the host and invited people, unless the host shares it with the workspace
     ...(b.instant ? { status: 'live', startedAt: new Date() } : {}),
   });
   res.status(201).json({ success: true, meeting: view(meeting), unknownEmails });

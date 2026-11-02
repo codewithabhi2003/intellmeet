@@ -13,6 +13,7 @@ const userSchema = new mongoose.Schema({
     searchAnswerLanguage: { type: String, default: null },
   },
   isActive: { type: Boolean, default: true },
+  tokenVersion: { type: Number, default: 0 },   // bumping this signs the user out everywhere (every issued token carries the version it was made with)
 }, { timestamps: { createdAt: true, updatedAt: false } });
 
 userSchema.pre('save', async function (next) {

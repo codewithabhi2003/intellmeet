@@ -15,7 +15,7 @@ import * as aiService from '../src/services/aiService';
 import * as userService from '../src/services/userService';
 
 vi.mock('../src/services/aiService', () => ({ languages: vi.fn(), status: vi.fn() }));
-vi.mock('../src/services/userService', () => ({ updateMe: vi.fn(), putLanguagePreferences: vi.fn() }));
+vi.mock('../src/services/userService', () => ({ updateMe: vi.fn(), putLanguagePreferences: vi.fn(), changePassword: vi.fn(), securityEvents: vi.fn().mockResolvedValue([]) }));
 vi.mock('react-hot-toast', () => ({ default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 beforeEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -150,6 +150,8 @@ describe('TaskBoard + Settings', () => {
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Appearance' }).parentElement, { key: 'ArrowRight' });
     expect(screen.getByRole('tab', { name: 'Language' }).getAttribute('aria-selected')).toBe('true'); expect(screen.getByRole('tabpanel')).toBeTruthy();
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Language' }).parentElement, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Security' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Security' }).parentElement, { key: 'ArrowRight' });
     expect(screen.getByRole('tab', { name: 'Profile' }).getAttribute('aria-selected')).toBe('true');   // wraps around
   });
 });

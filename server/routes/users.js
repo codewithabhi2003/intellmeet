@@ -9,11 +9,17 @@ const avatarLimiter = rateLimit({ windowMs: 60 * 1000, limit: 10, standardHeader
   keyGenerator: (req) => String(req.user?._id || 'anon'),
   message: { success: false, code: 'RATE_LIMITED', message: 'Too many uploads. Please wait a moment.' } });
 
+const sensitiveLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: (req) => String(req.user?._id || 'anon'),
+  message: { success: false, code: 'RATE_LIMITED', message: 'Too many attempts. Please wait and try again.' } });
+
 router.use(protect);
 router.get('/me', c.getMe);
 router.put('/me', validate({ body: c.updateSchema }), c.updateMe);
 router.post('/me/avatar', avatarLimiter, uploadAvatar, c.uploadAvatar);
 router.delete('/me/avatar', c.removeAvatar);
+router.put('/me/password', sensitiveLimiter, validate({ body: c.passwordSchema }), c.changePassword);
+router.get('/me/security-events', c.securityEvents);
 router.get('/me/language-preferences', c.getLang);
 router.put('/me/language-preferences', validate({ body: c.langPrefSchema }), c.putLang);
 router.get('/:id/avatar', validate({ params: c.idParam }), c.getAvatar);

@@ -69,7 +69,7 @@ export default function MeetingHistory() {
             const host = String(m.hostId) === String(user.id);
             return (
               <li key={m.id} className="bento-tile flex flex-wrap items-center gap-3 !p-4">
-                <div className="min-w-0 flex-1"><p className="truncate font-semibold text-ink">{m.title}</p><p className="mono text-xs text-ink-muted">{formatWhen(m)}{host ? ' · You host' : ''}{(m.status === 'live' || m.status === 'scheduled') ? ` · Code ${m.roomCode}` : ''}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate font-semibold text-ink">{m.title}</p><p className="mono text-xs text-ink-muted">{formatWhen(m)}{host ? ' · You host' : ''}{(m.status === 'live' || m.status === 'scheduled') ? ` · Code ${m.roomCode}` : ''}{m.visibility === 'private' ? ' · Private' : ''}</p></div>
                 <StatusBadge status={m.status} />
                 <div className="flex items-center gap-1">
                   {(m.status === 'live' || m.status === 'scheduled') && <button type="button" className="btn-icon" aria-label={`Copy link for ${m.title}`} onClick={async () => { (await copyText(meetingLink(m.roomCode))) ? toast.success('Meeting link copied') : toast.error('Could not copy the link'); }}><Link2 size={18} aria-hidden /></button>}

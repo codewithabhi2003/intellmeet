@@ -2,24 +2,20 @@
 const Workspace = require('../../models/Workspace');
 const Meeting = require('../../models/Meeting');
 
+// host, invited people and participants always; the rest of the workspace only when the meeting is NOT private
+const whoCanSee = (user, wsIds) => [
+  { hostId: user._id }, { 'participants.userId': user._id }, { invitedUserIds: user._id },
+  { workspaceId: { $in: wsIds }, visibility: { $ne: 'private' } },
+];
+
 async function accessQuery(user, extra = {}) {
   const wsIds = await Workspace.find({ 'members.userId': user._id }).distinct('_id');
-  return {
-    ...extra,
-    isDeleted: false,
-    $or: [
-      { hostId: user._id }, { 'participants.userId': user._id },
-      { invitedUserIds: user._id }, { workspaceId: { $in: wsIds } },
-    ],
-  };
+  return { ...extra, isDeleted: false, $or: whoCanSee(user, wsIds) };
 }
 
 async function getAuthorizedMeetingIds(user, { workspaceId, meetingIds, from, to } = {}) {
   const wsIds = await Workspace.find({ 'members.userId': user._id }).distinct('_id');
-  const q = {
-    isDeleted: false,
-    $or: [{ hostId: user._id }, { 'participants.userId': user._id }, { invitedUserIds: user._id }, { workspaceId: { $in: wsIds } }],
-  };
+  const q = { isDeleted: false, $or: whoCanSee(user, wsIds) };
   if (workspaceId) {
     if (!wsIds.some((w) => w.equals(workspaceId))) return [];
     q.workspaceId = workspaceId;

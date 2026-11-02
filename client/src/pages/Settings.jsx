@@ -1,18 +1,20 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LogOut, Moon, Sun, Trash2, Upload } from 'lucide-react';
+import { LogOut, Moon, ShieldAlert, Sun, Trash2, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Avatar from '../components/common/Avatar';
+import Modal from '../components/common/Modal';
 import LanguageSelect from '../components/language/LanguageSelect';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { AVATAR_MAX_MB, AVATAR_TYPES, checkAvatarFile } from '../lib/avatar';
+import { deviceLabel, eventLabel, isSuspicious } from '../lib/securityEvents';
 import * as aiService from '../services/aiService';
 import * as userService from '../services/userService';
 import { errorCode, errorMessage } from '../services/api';
 
-const TABS = [['profile', 'Profile'], ['appearance', 'Appearance'], ['language', 'Language']];
+const TABS = [['profile', 'Profile'], ['appearance', 'Appearance'], ['language', 'Language'], ['security', 'Security']];
 
 function ProfileTab({ user, setUser }) {
   const { logout } = useAuth();
@@ -162,6 +164,95 @@ function LanguageTab({ user, setUser }) {
   );
 }
 
+// Security: change the password, sign out everywhere, and see recent activity on your account.
+function SecurityTab({ setUser }) {
+  const { logoutAll } = useAuth();
+  const navigate = useNavigate();
+  const [f, setF] = useState({ current: '', next: '', confirm: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [events, setEvents] = useState({ data: null, error: '' });
+  const [confirmOut, setConfirmOut] = useState(false);
+  const [outBusy, setOutBusy] = useState(false);
+  const [outError, setOutError] = useState('');
+
+  const loadEvents = useCallback(() => { setEvents({ data: null, error: '' }); userService.securityEvents().then((data) => setEvents({ data, error: '' })).catch((e) => setEvents({ data: null, error: errorMessage(e, 'Could not load recent activity.') })); }, []);
+  useEffect(() => { loadEvents(); }, [loadEvents]);
+
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const mismatch = f.confirm && f.next !== f.confirm;
+  const same = f.next && f.next === f.current;
+  const valid = f.current && f.next.length >= 8 && f.next === f.confirm && !same && !busy;
+
+  const submit = async (e) => {
+    e.preventDefault(); setError(''); setBusy(true);
+    try {
+      setUser(await userService.changePassword({ currentPassword: f.current, newPassword: f.next }));
+      setF({ current: '', next: '', confirm: '' });
+      toast.success('Password changed. Your other devices were signed out.');
+      loadEvents();
+    } catch (err) { setError(errorMessage(err, 'Could not change the password.')); setF((x) => ({ ...x, current: '' })); }
+    finally { setBusy(false); }
+  };
+  const signOutEverywhere = async () => {
+    setOutBusy(true); setOutError('');
+    try { await logoutAll(); navigate('/', { replace: true }); }
+    catch (err) { setOutError(errorMessage(err, 'Could not sign out of all devices. You are still signed in.')); setOutBusy(false); }
+  };
+
+  return (
+    <div className="max-w-xl space-y-8">
+      <form onSubmit={submit} className="space-y-4" noValidate aria-labelledby="pw-h">
+        <h2 id="pw-h" className="text-base font-bold text-ink">Change password</h2>
+        <div><label className="label" htmlFor="cp">Current password</label><input id="cp" type="password" autoComplete="current-password" className="field" value={f.current} onChange={set('current')} /></div>
+        <div><label className="label" htmlFor="np">New password</label><input id="np" type="password" autoComplete="new-password" aria-describedby="np-h" className="field" value={f.next} onChange={set('next')} />
+          <p id="np-h" className="mt-1 text-xs" style={{ color: same ? 'var(--red-text)' : 'var(--text-muted)' }}>{same ? 'Choose a password different from the current one.' : 'At least 8 characters.'}</p></div>
+        <div><label className="label" htmlFor="cf">Confirm new password</label><input id="cf" type="password" autoComplete="new-password" aria-invalid={!!mismatch} className="field" value={f.confirm} onChange={set('confirm')} />
+          {mismatch && <p className="mt-1 text-xs" style={{ color: 'var(--red-text)' }}>The passwords do not match.</p>}</div>
+        <p role="alert" aria-live="polite" className="min-h-[1.25rem] text-sm" style={{ color: 'var(--red-text)' }}>{error}</p>
+        <button type="submit" className="btn-primary" disabled={!valid}>{busy ? 'Changing…' : 'Change password'}</button>
+        <p className="text-xs text-ink-muted">Changing your password signs out every other device, including anyone who may have your old session.</p>
+      </form>
+
+      <section aria-labelledby="all-h" className="border-t border-line pt-6">
+        <h2 id="all-h" className="mb-1 text-base font-bold text-ink">Log out of all devices</h2>
+        <p className="mb-3 text-sm text-ink-soft">Ends every session on every browser and device, including this one. Use it if you think someone else may have signed in as you.</p>
+        <button type="button" className="btn-secondary" onClick={() => { setOutError(''); setConfirmOut(true); }}><LogOut size={16} aria-hidden />Log out of all devices</button>
+      </section>
+
+      <section aria-labelledby="act-h" className="border-t border-line pt-6">
+        <h2 id="act-h" className="mb-1 text-base font-bold text-ink">Recent activity</h2>
+        <p className="mb-3 text-sm text-ink-soft">Don’t recognize something? Change your password and log out of all devices.</p>
+        {events.error && <div role="alert" className="space-y-2 text-sm"><p style={{ color: 'var(--red-text)' }}>{events.error}</p><button type="button" className="btn-secondary" onClick={loadEvents}>Retry</button></div>}
+        {!events.error && !events.data && <p role="status" className="text-sm text-ink-muted">Loading…</p>}
+        {events.data?.length === 0 && <p className="text-sm text-ink-muted">No activity recorded yet.</p>}
+        {events.data?.length > 0 && (
+          <ul className="space-y-2">
+            {events.data.map((e) => (
+              <li key={e.id} className="flex items-start gap-3 rounded-xl border border-line bg-card px-3 py-2 text-sm">
+                {isSuspicious(e.type) && <ShieldAlert size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--red-text)' }} aria-hidden />}
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium" style={{ color: isSuspicious(e.type) ? 'var(--red-text)' : 'var(--text-primary)' }}>{eventLabel(e.type)}</span>
+                  <span className="mono block truncate text-xs text-ink-muted">{new Date(e.createdAt).toLocaleString()} · {deviceLabel(e.userAgent)}{e.ip ? ` · ${e.ip}` : ''}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <Modal open={confirmOut} onClose={() => !outBusy && setConfirmOut(false)} title="Log out of all devices?">
+        <p className="mb-3 text-sm text-ink-soft">Every session, including this one, will be ended and any live meeting connections will drop. You can sign in again afterwards.</p>
+        <p role="alert" className="mb-3 min-h-[1.25rem] text-sm" style={{ color: 'var(--red-text)' }}>{outError}</p>
+        <div className="flex gap-2">
+          <button type="button" className="btn-primary" onClick={signOutEverywhere} disabled={outBusy}>{outBusy ? 'Signing out…' : 'Log out everywhere'}</button>
+          <button type="button" className="btn-secondary" onClick={() => setConfirmOut(false)} disabled={outBusy}>Cancel</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { user, setUser } = useAuth();
   const [tab, setTab] = useState('profile');
@@ -186,6 +277,7 @@ export default function Settings() {
         {tab === 'profile' && <ProfileTab user={user} setUser={setUser} />}
         {tab === 'appearance' && <AppearanceTab />}
         {tab === 'language' && <LanguageTab user={user} setUser={setUser} />}
+        {tab === 'security' && <SecurityTab setUser={setUser} />}
       </div>
     </div>
   );

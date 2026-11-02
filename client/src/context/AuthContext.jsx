@@ -18,6 +18,8 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (body) => { const u = await authService.login(body); setUser(u); return u; }, []);
   const register = useCallback(async (body) => { const u = await authService.register(body); setUser(u); return u; }, []);
   const logout = useCallback(async () => { try { await authService.logout(); } finally { setUser(null); } }, []);
-  const value = useMemo(() => ({ user, loading, login, register, logout, setUser }), [user, loading, login, register, logout]);
+  // Signs out on EVERY device. If the request fails we do NOT pretend it worked: the error goes to the caller and the user stays signed in.
+  const logoutAll = useCallback(async () => { await authService.logoutAll(); setUser(null); }, []);
+  const value = useMemo(() => ({ user, loading, login, register, logout, logoutAll, setUser }), [user, loading, login, register, logout, logoutAll]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

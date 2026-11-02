@@ -35,5 +35,8 @@
     "globals": "^15.9.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react": "^7.37.0"
+  },
+  "overrides": {
+    "follow-redirects": "^1.16.2"
   }
 }

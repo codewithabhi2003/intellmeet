@@ -8,5 +8,6 @@ const limiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 50, standardHeaders
 router.post('/register', limiter, validate({ body: c.registerSchema }), c.register);
 router.post('/login', limiter, validate({ body: c.loginSchema }), c.login);
 router.post('/logout', c.logout);
+router.post('/logout-all', protect, c.logoutAll);
 router.get('/me', protect, c.me);
 module.exports = router;
