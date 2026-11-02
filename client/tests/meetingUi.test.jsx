@@ -88,7 +88,7 @@ describe('CreateMeeting', () => {
     fireEvent.change(screen.getByLabelText('Summary language'), { target: { value: 'en' } });
     fireEvent.click(screen.getByRole('button', { name: /start meeting/i }));
     await waitFor(() => expect(meetingService.create).toHaveBeenCalled());
-    expect(meetingService.create.mock.calls[0][0]).toEqual({ title: 'Planning', workspaceId: 'w1', instant: true,
+    expect(meetingService.create.mock.calls[0][0]).toEqual({ title: 'Planning', workspaceId: 'w1', instant: true, roomCode: expect.stringMatching(/^[A-Za-z0-9_-]{12}$/), visibility: 'private',
       languageSettings: { primaryLanguage: 'hi', autoDetect: true, transcriptLanguage: null, summaryLanguage: 'en' } });
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/room/CODE123'));
   });

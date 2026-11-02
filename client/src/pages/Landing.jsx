@@ -1,3 +1,4 @@
+
 import FinalCta from '../components/landing/FinalCta';
 import Features from '../components/landing/Features';
 import Hero from '../components/landing/Hero';
@@ -6,6 +7,7 @@ import LandingFooter from '../components/landing/LandingFooter';
 import LandingNav from '../components/landing/LandingNav';
 import Trust from '../components/landing/Trust';
 import GlassPage from '../components/landing/GlassPage';
+import MarqueeBelt from '../components/landing/MarqueeBelt';
 
 // Public marketing page, shown at "/" to signed-out visitors.
 export default function Landing() {
@@ -22,6 +24,7 @@ export default function Landing() {
 
       <main id="main">
         <Hero />
+        <MarqueeBelt />
         <Features />
         <HowItWorks />
         <Trust />

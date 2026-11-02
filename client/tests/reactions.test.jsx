@@ -43,12 +43,30 @@ describe('ReactionButton (picker)', () => {
     const ev = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }); act(() => { document.dispatchEvent(ev); });
     expect(screen.queryByRole('group', { name: /send a reaction/i })).toBeNull(); expect(document.activeElement).toBe(trigger); expect(ev.defaultPrevented).toBe(true);   // so the side panel won't also close
   });
-  it('a click outside closes it, a click inside does not', () => {
-    render(<div><ReactionButton onReact={() => {}} /><button>elsewhere</button></div>);
-    fireEvent.click(screen.getByRole('button', { name: 'Reactions' }));
-    fireEvent.mouseDown(screen.getByRole('button', { name: 'Send Fire reaction' })); expect(screen.getByRole('group', { name: /send a reaction/i })).toBeTruthy();
-    fireEvent.mouseDown(screen.getByText('elsewhere')); expect(screen.queryByRole('group', { name: /send a reaction/i })).toBeNull();
-  });
+ it('a click outside closes it, a click inside does not', () => {
+  render(
+    <div>
+      <ReactionButton onReact={() => {}} />
+      <button>elsewhere</button>
+    </div>
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: 'Reactions' }));
+
+  fireEvent.pointerDown(
+    screen.getByRole('button', { name: 'Send Fire reaction' })
+  );
+
+  expect(
+    screen.getByRole('group', { name: /send a reaction/i })
+  ).toBeTruthy();
+
+  fireEvent.pointerDown(screen.getByText('elsewhere'));
+
+  expect(
+    screen.queryByRole('group', { name: /send a reaction/i })
+  ).toBeNull();
+});
   it('is disabled (and closed) until the call is connected', () => {
     const { rerender } = render(<ReactionButton onReact={() => {}} disabled />);
     expect(screen.getByRole('button', { name: 'Reactions' }).disabled).toBe(true);
