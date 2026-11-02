@@ -1,0 +1,111 @@
+
+name: IntellMeet CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "client/**"
+      - "server/**"
+      - ".github/workflows/ci.yml"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "client/**"
+      - "server/**"
+      - ".github/workflows/ci.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: intellmeet-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ==========================================
+  # FRONTEND CI
+  # ==========================================
+
+  client-checks:
+    name: Frontend Checks
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: client
+
+    env:
+      CI: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend ESLint
+        run: npm run lint --if-present
+
+      - name: Run frontend tests
+        run: npm test -- --run
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Audit frontend dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  # ==========================================
+  # BACKEND CI
+  # ==========================================
+
+  server-checks:
+    name: Backend Checks
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: server
+
+    env:
+      NODE_ENV: test
+      CI: true
+      JWT_SECRET: test-only-secret-key-at-least-32-characters-long
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Run backend ESLint
+        run: npm run lint --if-present
+
+      - name: Run backend tests
+        run: npm test -- --run
+
+      - name: Audit backend dependencies
+        run: npm audit --omit=dev --audit-level=high
