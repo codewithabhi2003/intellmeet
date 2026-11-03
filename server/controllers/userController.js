@@ -11,7 +11,7 @@ const cloudinary = require('../config/cloudinary');
 const code = langs.codeSchema().nullable();
 const oid = z.string().regex(/^[a-f\d]{24}$/i);
 
-// strict(): unknown keys (role, avatarUrl, password ...) are rejected.
+// Profile update validation
 exports.updateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   email: z.string().trim().email().max(200).optional(),
@@ -31,6 +31,7 @@ exports.langPrefSchema = z.object({
 
 exports.idParam = z.object({ id: oid });
 
+// Public user response
 const pub = (u) => ({
   id: u._id,
   name: u.name,
@@ -40,9 +41,11 @@ const pub = (u) => ({
   languagePreferences: u.languagePreferences,
 });
 
+// Get current user
 exports.getMe = (req, res) =>
   res.json({ success: true, user: pub(req.user) });
 
+// Update profile
 exports.updateMe = asyncHandler(async (req, res) => {
   const { name, email, currentPassword } = req.body;
   const next = email?.toLowerCase();
@@ -66,7 +69,10 @@ exports.updateMe = asyncHandler(async (req, res) => {
       });
     }
 
-    if (await User.exists({ email: next, _id: { $ne: req.user._id } })) {
+    if (await User.exists({
+      email: next,
+      _id: { $ne: req.user._id },
+    })) {
       return res.status(409).json({
         success: false,
         code: 'DUPLICATE',
@@ -81,32 +87,42 @@ exports.updateMe = asyncHandler(async (req, res) => {
   if (name) req.user.name = name;
 
   await req.user.save();
+
   res.json({ success: true, user: pub(req.user) });
 });
 
-// Validate actual file signatures, not client-declared MIME types.
-const sniff = (b) => {
+// Validate actual image file signatures
+const sniff = (buffer) => {
   if (
-    b.length > 8 &&
-    b.subarray(0, 8).equals(
+    buffer.length > 8 &&
+    buffer.subarray(0, 8).equals(
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     )
-  ) return { ext: 'png', mime: 'image/png' };
-
-  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
-    return { ext: 'jpg', mime: 'image/jpeg' };
+  ) {
+    return true;
   }
 
   if (
-    b.length > 12 &&
-    b.subarray(0, 4).toString('latin1') === 'RIFF' &&
-    b.subarray(8, 12).toString('latin1') === 'WEBP'
+    buffer.length > 3 &&
+    buffer[0] === 0xff &&
+    buffer[1] === 0xd8 &&
+    buffer[2] === 0xff
   ) {
-    return { ext: 'webp', mime: 'image/webp' };
+    return true;
   }
 
-  return null;
+  if (
+    buffer.length > 12 &&
+    buffer.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('latin1') === 'WEBP'
+  ) {
+    return true;
+  }
+
+  return false;
 };
+
+// Upload image to Cloudinary using memory buffer
 
 const uploadToCloudinary = (buffer, folder) =>
   new Promise((resolve, reject) => {
@@ -118,31 +134,50 @@ const uploadToCloudinary = (buffer, folder) =>
       },
       (error, result) => {
         if (error) {
-  console.error('CLOUDINARY UPLOAD ERROR:', error);
-  return reject(error);
-}
+          console.error('Cloudinary upload failed:', {
+            message: error.message,
+            http_code: error.http_code,
+          });
+
+          return reject(error);
+        }
+
+        if (!result?.secure_url || !result?.public_id) {
+          return reject(
+            new Error('Cloudinary returned an incomplete upload result.')
+          );
+        }
+
+        resolve(result);
       }
     );
 
+    stream.on('error', reject);
     stream.end(buffer);
   });
 
+
+// Delete image from Cloudinary
 const deleteCloudinaryImage = async (publicId) => {
   if (!publicId) return;
 
   try {
-    await cloudinary.uploader.destroy(publicId, {
+    const result = await cloudinary.uploader.destroy(publicId, {
       resource_type: 'image',
       invalidate: true,
     });
+
+    if (result.result !== 'ok' && result.result !== 'not found') {
+      console.error('Cloudinary avatar deletion result:', result);
+    }
   } catch (error) {
-    // A cleanup failure should not undo a successful avatar update.
     console.error('Cloudinary avatar cleanup failed:', error.message);
   }
 };
 
+// Upload or replace avatar
 exports.uploadAvatar = asyncHandler(async (req, res) => {
-  if (!req.file) {
+  if (!req.file?.buffer) {
     return res.status(400).json({
       success: false,
       code: 'VALIDATION_ERROR',
@@ -150,9 +185,7 @@ exports.uploadAvatar = asyncHandler(async (req, res) => {
     });
   }
 
-  const kind = sniff(req.file.buffer);
-
-  if (!kind) {
+  if (!sniff(req.file.buffer)) {
     return res.status(400).json({
       success: false,
       code: 'VALIDATION_ERROR',
@@ -161,7 +194,7 @@ exports.uploadAvatar = asyncHandler(async (req, res) => {
   }
 
   const user = await User.findById(req.user._id)
-    .select('+avatarPublicId +avatarFile');
+    .select('+avatarPublicId');
 
   if (!user) {
     return res.status(404).json({
@@ -181,7 +214,6 @@ exports.uploadAvatar = asyncHandler(async (req, res) => {
   try {
     user.avatarUrl = result.secure_url;
     user.avatarPublicId = result.public_id;
-    user.avatarFile = '';
 
     await user.save();
   } catch (error) {
@@ -191,12 +223,16 @@ exports.uploadAvatar = asyncHandler(async (req, res) => {
 
   await deleteCloudinaryImage(previousPublicId);
 
-  res.json({ success: true, user: pub(user) });
+  res.json({
+    success: true,
+    user: pub(user),
+  });
 });
 
+// Remove avatar
 exports.removeAvatar = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id)
-    .select('+avatarPublicId +avatarFile');
+    .select('+avatarPublicId');
 
   if (!user) {
     return res.status(404).json({
@@ -208,23 +244,25 @@ exports.removeAvatar = asyncHandler(async (req, res) => {
 
   const previousPublicId = user.avatarPublicId;
 
-  user.avatarFile = '';
-  user.avatarPublicId = '';
   user.avatarUrl = '';
+  user.avatarPublicId = '';
 
   await user.save();
 
   await deleteCloudinaryImage(previousPublicId);
 
-  res.json({ success: true, user: pub(user) });
+  res.json({
+    success: true,
+    user: pub(user),
+  });
 });
 
-// Any signed-in user may view an avatar.
+// Retrieve avatar through Cloudinary URL
 exports.getAvatar = asyncHandler(async (req, res) => {
-  const u = await User.findById(req.params.id)
-    .select('+avatarPublicId +avatarFile');
+  const user = await User.findById(req.params.id)
+    .select('avatarUrl');
 
-  if (!u?.avatarUrl) {
+  if (!user?.avatarUrl) {
     return res.status(404).json({
       success: false,
       code: 'NOT_FOUND',
@@ -232,18 +270,18 @@ exports.getAvatar = asyncHandler(async (req, res) => {
     });
   }
 
-  if (u.avatarUrl.startsWith('https://res.cloudinary.com/')) {
-    return res.redirect(302, u.avatarUrl);
+  if (!user.avatarUrl.startsWith('https://res.cloudinary.com/')) {
+    return res.status(404).json({
+      success: false,
+      code: 'NOT_FOUND',
+      message: 'Avatar is not available.',
+    });
   }
 
-  return res.status(404).json({
-    success: false,
-    code: 'NOT_FOUND',
-    message: 'Avatar is not available in Cloudinary.',
-  });
+  return res.redirect(302, user.avatarUrl);
 });
 
-// Password changes and session revocation.
+// Change password and revoke existing sessions
 exports.changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
 
@@ -284,6 +322,7 @@ exports.changePassword = asyncHandler(async (req, res) => {
   u.tokenVersion = (u.tokenVersion || 0) + 1;
 
   await u.save();
+
   await security.clearFailures(u.email);
   await security.recordEvent(u._id, 'password_changed', req);
 
@@ -291,13 +330,21 @@ exports.changePassword = asyncHandler(async (req, res) => {
 
   const token = setAuthCookie(res, u);
 
-  res.json({ success: true, token, user: pub(u) });
+  res.json({
+    success: true,
+    token,
+    user: pub(u),
+  });
 });
 
+// Get security events
 exports.securityEvents = asyncHandler(async (req, res) => {
   const rows = await SecurityEvent.find({
     userId: req.user._id,
-  }).sort({ createdAt: -1 }).limit(50).lean();
+  })
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
 
   res.json({
     success: true,
@@ -311,15 +358,17 @@ exports.securityEvents = asyncHandler(async (req, res) => {
   });
 });
 
+// Get language preferences
 exports.getLang = (req, res) =>
   res.json({
     success: true,
     languagePreferences: req.user.languagePreferences,
   });
 
+// Update language preferences
 exports.putLang = asyncHandler(async (req, res) => {
-  Object.entries(req.body).forEach(([k, v]) => {
-    req.user.languagePreferences[k] = v;
+  Object.entries(req.body).forEach(([key, value]) => {
+    req.user.languagePreferences[key] = value;
   });
 
   await req.user.save();

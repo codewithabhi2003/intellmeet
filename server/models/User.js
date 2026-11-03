@@ -11,9 +11,6 @@ const userSchema = new mongoose.Schema({
   avatarUrl: { type: String, default: '' },
   avatarPublicId: { type: String, default: '', select: false },
 
-  // Retained temporarily for compatibility with existing local avatar records
-  avatarFile: { type: String, default: '', select: false },
-
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
 
   languagePreferences: {
