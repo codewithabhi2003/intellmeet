@@ -117,8 +117,10 @@ const uploadToCloudinary = (buffer, folder) =>
         allowed_formats: ['png', 'jpg', 'webp'],
       },
       (error, result) => {
-        if (error) return reject(error);
-        resolve(result);
+        if (error) {
+  console.error('CLOUDINARY UPLOAD ERROR:', error);
+  return reject(error);
+}
       }
     );
 
