@@ -1,6 +1,7 @@
 
 const asyncHandler = require('express-async-handler');
 const { z } = require('zod');
+const crypto = require('crypto');
 const User = require('../models/User');
 const SecurityEvent = require('../models/SecurityEvent');
 const security = require('../services/security');
@@ -11,7 +12,6 @@ const cloudinary = require('../config/cloudinary');
 const code = langs.codeSchema().nullable();
 const oid = z.string().regex(/^[a-f\d]{24}$/i);
 
-// Profile update validation
 exports.updateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   email: z.string().trim().email().max(200).optional(),
@@ -31,7 +31,6 @@ exports.langPrefSchema = z.object({
 
 exports.idParam = z.object({ id: oid });
 
-// Public user response
 const pub = (u) => ({
   id: u._id,
   name: u.name,
@@ -41,11 +40,9 @@ const pub = (u) => ({
   languagePreferences: u.languagePreferences,
 });
 
-// Get current user
 exports.getMe = (req, res) =>
   res.json({ success: true, user: pub(req.user) });
 
-// Update profile
 exports.updateMe = asyncHandler(async (req, res) => {
   const { name, email, currentPassword } = req.body;
   const next = email?.toLowerCase();
@@ -91,7 +88,6 @@ exports.updateMe = asyncHandler(async (req, res) => {
   res.json({ success: true, user: pub(req.user) });
 });
 
-// Validate actual image file signatures
 const sniff = (buffer) => {
   if (
     buffer.length > 8 &&
@@ -122,13 +118,13 @@ const sniff = (buffer) => {
   return false;
 };
 
-// Upload image to Cloudinary using memory buffer
-
 const uploadToCloudinary = (buffer, folder) =>
   new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
         folder,
+        public_id: crypto.randomBytes(16).toString('hex'),
+        overwrite: false,
         resource_type: 'image',
         allowed_formats: ['png', 'jpg', 'webp'],
       },
@@ -138,7 +134,6 @@ const uploadToCloudinary = (buffer, folder) =>
             message: error.message,
             http_code: error.http_code,
           });
-
           return reject(error);
         }
 
@@ -156,8 +151,6 @@ const uploadToCloudinary = (buffer, folder) =>
     stream.end(buffer);
   });
 
-
-// Delete image from Cloudinary
 const deleteCloudinaryImage = async (publicId) => {
   if (!publicId) return;
 
@@ -175,7 +168,6 @@ const deleteCloudinaryImage = async (publicId) => {
   }
 };
 
-// Upload or replace avatar
 exports.uploadAvatar = asyncHandler(async (req, res) => {
   if (!req.file?.buffer) {
     return res.status(400).json({
@@ -214,14 +206,15 @@ exports.uploadAvatar = asyncHandler(async (req, res) => {
   try {
     user.avatarUrl = result.secure_url;
     user.avatarPublicId = result.public_id;
-
     await user.save();
   } catch (error) {
     await deleteCloudinaryImage(result.public_id);
     throw error;
   }
 
-  await deleteCloudinaryImage(previousPublicId);
+  if (previousPublicId && previousPublicId !== result.public_id) {
+    await deleteCloudinaryImage(previousPublicId);
+  }
 
   res.json({
     success: true,
@@ -229,7 +222,6 @@ exports.uploadAvatar = asyncHandler(async (req, res) => {
   });
 });
 
-// Remove avatar
 exports.removeAvatar = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id)
     .select('+avatarPublicId');
@@ -257,7 +249,6 @@ exports.removeAvatar = asyncHandler(async (req, res) => {
   });
 });
 
-// Retrieve avatar through Cloudinary URL
 exports.getAvatar = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id)
     .select('avatarUrl');
@@ -281,7 +272,6 @@ exports.getAvatar = asyncHandler(async (req, res) => {
   return res.redirect(302, user.avatarUrl);
 });
 
-// Change password and revoke existing sessions
 exports.changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
 
@@ -337,7 +327,6 @@ exports.changePassword = asyncHandler(async (req, res) => {
   });
 });
 
-// Get security events
 exports.securityEvents = asyncHandler(async (req, res) => {
   const rows = await SecurityEvent.find({
     userId: req.user._id,
@@ -358,14 +347,12 @@ exports.securityEvents = asyncHandler(async (req, res) => {
   });
 });
 
-// Get language preferences
 exports.getLang = (req, res) =>
   res.json({
     success: true,
     languagePreferences: req.user.languagePreferences,
   });
 
-// Update language preferences
 exports.putLang = asyncHandler(async (req, res) => {
   Object.entries(req.body).forEach(([key, value]) => {
     req.user.languagePreferences[key] = value;
