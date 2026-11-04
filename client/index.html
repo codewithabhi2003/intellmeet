@@ -1,19 +1,54 @@
+
 <!doctype html>
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />
+
     <title>IntellMeet</title>
-    <!-- No-flash: sets the theme BEFORE first paint. Night is the default; only an explicit choice saved in Settings gives Day. -->
-    <script>(function(){var t='dark';try{var s=localStorage.getItem('intellmeet-theme');if(s==='light')t='light'}catch(e){}
-document.documentElement.setAttribute('data-theme',t)})()</script>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Theme: prevent flash before first paint -->
+    <script>
+      (function () {
+        var theme = 'dark';
+
+        try {
+          var savedTheme = localStorage.getItem('intellmeet-theme');
+          if (savedTheme === 'light') theme = 'light';
+        } catch (error) {}
+
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    />
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Browser tab branding -->
+    <meta name="application-name" content="IntellMeet" />
+    <meta
+      name="description"
+      content="IntellMeet — Intelligent meetings and collaboration."
+    />
   </head>
+
   <body>
     <div id="root"></div>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
