@@ -368,11 +368,13 @@
   animation-delay: -3s;
 }
 
-/* ---------- text belt ---------- */
+/* ---------- text belt: full viewport width ---------- */
 .lp-belt {
-  padding: 0 1rem;
-  margin: 0 auto;
-  max-width: 1400px;
+  width: 100vw;
+  max-width: none;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding: 0;
   /* Light mode → near-black, dark mode → near-white, because --text-primary already flips. */
   --lp-belt-border: var(--text-primary, currentColor);
 }
@@ -382,7 +384,7 @@
   align-items: center;
   overflow: hidden;
   border: 1.5px solid var(--lp-belt-border);
-  border-radius: 18px;
+  border-radius: 0;
   color: var(--text-primary, inherit);
   background: color-mix(in srgb, var(--text-primary, #888) 4%, transparent);
 }
@@ -400,11 +402,7 @@
   animation: lp-marquee 48s linear infinite;
   will-change: transform;
 }
-/* Pause on hover over the text itself, or via the explicit pause button (never via the button's focus/hover). */
-.lp-belt__viewport:hover .lp-belt__track,
-.lp-belt.is-paused .lp-belt__track {
-  animation-play-state: paused;
-}
+/* The marquee runs continuously; hovering does not pause it. */
 .lp-belt__group {
   display: flex;
   flex-shrink: 0;
@@ -427,24 +425,6 @@
   border-radius: 999px;
   background: linear-gradient(135deg, var(--lp-accent), var(--lp-violet) 55%, var(--lp-cyan));
 }
-.lp-belt__toggle {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  margin-right: 0.35rem;
-  border-radius: 999px;
-  color: inherit;
-  opacity: 0.7;
-  transition: opacity 0.2s, background 0.2s;
-}
-.lp-belt__toggle:hover {
-  opacity: 1;
-  background: color-mix(in srgb, var(--text-primary, #888) 10%, transparent);
-}
-
 /* ---------- how it works ---------- */
 .lp-steps {
   position: relative;
@@ -764,9 +744,6 @@
     right: 10px;
     top: calc(100% - 7px);
   }
-  .lp-belt {
-    padding: 0 0.75rem;
-  }
   .lp-belt__track {
     animation-duration: 36s;
   }
@@ -796,8 +773,7 @@
     justify-content: center;
     row-gap: 0.5rem;
   }
-  .lp-belt__group[aria-hidden='true'],
-  .lp-belt__toggle {
+  .lp-belt__group[aria-hidden='true'] {
     display: none;
   }
   .lp-belt__viewport {
