@@ -8,7 +8,7 @@ const iconBtn = 'btn-icon !h-9 !w-9 disabled:opacity-40';
 // The people panel. Everyone sees who is here (the host has a "Host" tag). Only the host gets controls:
 // let people in from the waiting room, mute a microphone, turn a camera off, remove someone, or mute everyone.
 // (The server enforces this too: the host is checked there on every action.)
-export default function ParticipantList({ people, hostId, isHost = false, waiting = [], invite, onAdmit, onDeny, onMute, onMuteAll, onRemove }) {
+export default function ParticipantList({ people, hostId, isHost = false, seminar = false, waiting = [], invite, onAdmit, onDeny, onMute, onMuteAll, onRemove }) {
   const [showInvite, setShowInvite] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const isHostPerson = (p) => String(p.userId) === String(hostId);
@@ -45,14 +45,14 @@ export default function ParticipantList({ people, hostId, isHost = false, waitin
               {p.media.recording && <Circle size={10} fill="currentColor" style={{ color: 'var(--red-text)' }} aria-label="Recording" />}
               {isHost && !p.isSelf ? (
                 <>
-                  <button type="button" className={iconBtn} disabled={!p.media.audio} onClick={() => onMute(p.key, 'audio')} aria-label={p.media.audio ? `Mute ${p.name}` : `${p.name} is muted`}>{p.media.audio ? <Mic size={16} aria-hidden /> : <MicOff size={16} aria-hidden />}</button>
-                  <button type="button" className={iconBtn} disabled={!p.media.video} onClick={() => onMute(p.key, 'video')} aria-label={p.media.video ? `Turn off ${p.name}'s camera` : `${p.name}'s camera is off`}>{p.media.video ? <Video size={16} aria-hidden /> : <VideoOff size={16} aria-hidden />}</button>
+                  {!seminar && (<button type="button" className={iconBtn} disabled={!p.media.audio} onClick={() => onMute(p.key, 'audio')} aria-label={p.media.audio ? `Mute ${p.name}` : `${p.name} is muted`}>{p.media.audio ? <Mic size={16} aria-hidden /> : <MicOff size={16} aria-hidden />}</button>)}
+                  {!seminar && (<button type="button" className={iconBtn} disabled={!p.media.video} onClick={() => onMute(p.key, 'video')} aria-label={p.media.video ? `Turn off ${p.name}'s camera` : `${p.name}'s camera is off`}>{p.media.video ? <Video size={16} aria-hidden /> : <VideoOff size={16} aria-hidden />}</button>)}
                   <button type="button" className={iconBtn} onClick={() => setConfirm(p)} aria-label={`Remove ${p.name} from the meeting`}><UserMinus size={16} aria-hidden /></button>
                 </>
               ) : (
                 <>
-                  {!p.media.audio && <MicOff size={14} className="text-ink-muted" aria-label="Muted" />}
-                  {!p.media.video && !p.media.screen && <VideoOff size={14} className="text-ink-muted" aria-label="Camera off" />}
+                  {!seminar && !p.media.audio && <MicOff size={14} className="text-ink-muted" aria-label="Muted" />}
+                  {!seminar && !p.media.video && !p.media.screen && <VideoOff size={14} className="text-ink-muted" aria-label="Camera off" />}
                 </>
               )}
             </li>
@@ -69,7 +69,7 @@ export default function ParticipantList({ people, hostId, isHost = false, waitin
         )}
         <div className="flex gap-2">
           {invite && <button type="button" className="btn-secondary flex-1 !px-3" aria-expanded={showInvite} onClick={() => setShowInvite((s) => !s)}><UserPlus size={16} aria-hidden />Add people</button>}
-          {isHost && <button type="button" className="btn-secondary flex-1 !px-3" onClick={onMuteAll}><VolumeX size={16} aria-hidden />Mute all</button>}
+          {isHost && !seminar && <button type="button" className="btn-secondary flex-1 !px-3" onClick={onMuteAll}><VolumeX size={16} aria-hidden />Mute all</button>}
         </div>
       </div>
 
