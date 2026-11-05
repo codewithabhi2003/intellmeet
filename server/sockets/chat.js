@@ -1,6 +1,6 @@
 const { z } = require('zod');
 const ChatMessage = require('../models/ChatMessage');
-const { getAccessibleMeeting } = require('../services/access/authorizedMeetings');
+const { canJoinLiveById } = require('../services/access/authorizedMeetings');
 const schema = z.object({ text: z.string().trim().min(1).max(2000) });
 
 exports.register = (io, socket) => {
@@ -14,7 +14,7 @@ exports.register = (io, socket) => {
       if (stamps.length >= 10) return ack({ ok: false, code: 'RATE_LIMITED', message: 'You are sending messages too quickly.' });
       stamps.push(now);
       const { text } = schema.parse(payload || {});
-      if (!(await getAccessibleMeeting(socket.user, meetingId))) return ack({ ok: false, code: 'FORBIDDEN', message: 'Access revoked.' });
+      if (!(await canJoinLiveById(socket.user, meetingId))) return ack({ ok: false, code: 'FORBIDDEN', message: 'Access revoked.' });
       const m = await ChatMessage.create({ meetingId, senderId: socket.user._id, text });
       const msg = { id: m._id, meetingId, sender: { id: socket.user._id, name: socket.user.name }, text: m.text, createdAt: m.createdAt };
       io.to(`meeting:${roomCode}`).emit('chat:message', msg);
