@@ -77,7 +77,10 @@ export default function MeetingRoom() {
       } catch (e2) { setMediaError(mediaErrorText(e2 || e)); }
     }
   }, []);
-  useEffect(() => { if (phase === 'prejoin') acquire('full'); }, [phase, acquire]);
+  const isHost = !!(meeting && user && String(meeting.hostId) === String(user.id));
+  const seminar = !!meeting?.seminar;
+  const attendee = seminar && !isHost;                    // a seminar attendee only watches, chats and reacts
+  useEffect(() => { if (phase === 'prejoin' && !attendee) acquire('full'); }, [phase, acquire, attendee]);   // attendees are never asked for the camera or microphone
   useEffect(() => () => { streamRef.current?.getTracks().forEach((t) => t.stop()); screenRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 
   const toggleTrack = (kind) => {
@@ -92,10 +95,10 @@ export default function MeetingRoom() {
 
   // 3. Mesh WebRTC
   const hostMuteRef = useRef(null);
-  const rtc = useWebRTC({ roomCode, localStream: stream, enabled: phase === 'inroom', onHostMute: (kind) => hostMuteRef.current?.(kind) });
+  const rtc = useWebRTC({ roomCode, localStream: stream, enabled: phase === 'inroom', onHostMute: (kind) => hostMuteRef.current?.(kind), seminar, isHost });
   const peersRef = useRef([]); peersRef.current = rtc.peers;
   // announce the initial mic/camera state once, when the join completes (not on every toggle)
-  useEffect(() => { if (rtc.status === 'joined') rtc.sendMedia({ audio: audioOn, video: videoOn && !!stream?.getVideoTracks().length }); },
+  useEffect(() => { if (rtc.status === 'joined' && !attendee) rtc.sendMedia({ audio: audioOn, video: videoOn && !!stream?.getVideoTracks().length }); },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [rtc.status]);
 
@@ -116,7 +119,6 @@ export default function MeetingRoom() {
   };
 
   // 5. Recording (host only), mixed audio, consent first
-  const isHost = meeting && user && String(meeting.hostId) === String(user.id);
   const getStreams = useCallback(() => [streamRef.current, ...peersRef.current.map((p) => p.stream)], []);
   const recorder = useRecorder({ meetingId: meeting?.id, getStreams });
   const recording = recorder.state === 'recording';
@@ -163,10 +165,15 @@ export default function MeetingRoom() {
 
   const selfStream = useMemo(() => (screen && stream ? new MediaStream([...screen.getVideoTracks(), ...stream.getAudioTracks()]) : stream), [screen, stream]);
   const hasCam = !!stream?.getVideoTracks().length;
-  const tiles = [
+  const allTiles = [
     { key: 'self', stream: selfStream, name: user?.name || 'You', isSelf: true, media: { audio: audioOn, video: videoOn && hasCam, screen: !!screen, recording }, userId: user?.id, isHost: !!isHost },
     ...rtc.peers.map((p) => ({ key: p.socketId, stream: p.stream, name: p.name, isSelf: false, media: p.media, connection: p.state, userId: p.userId, isHost: String(p.userId) === String(meeting?.hostId) })),
   ];
+  // Seminar: the host's stage shows only the host; an attendee's stage shows only the host. Attendees are listed in the Participants panel.
+  const hostPeer = rtc.peers.find((p) => String(p.userId) === String(meeting?.hostId));
+  const tiles = attendee
+    ? [{ key: 'host', stream: hostPeer?.stream || null, name: hostPeer?.name || 'Host', isSelf: false, media: hostPeer?.media || { audio: true, video: true, screen: false, recording: false }, connection: hostPeer?.state, userId: meeting?.hostId, isHost: true }]
+    : seminar ? allTiles.slice(0, 1) : allTiles;
   const someoneRecording = !recording && rtc.peers.some((p) => p.media.recording);
 
   // The host asked us to mute: switch the track off and tell the others. We may switch it back on ourselves.
@@ -192,6 +199,18 @@ export default function MeetingRoom() {
       <h1 className="text-2xl font-extrabold text-ink">Can’t open this meeting</h1>
       <p role="alert" className="text-ink-soft">{loadError}</p>
       <button type="button" className="btn-primary" onClick={() => navigate('/meetings')}>Back to meetings</button>
+    </div>
+  );
+  if (phase === 'prejoin' && attendee) return (
+    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-5 px-4 py-8">
+      <div><p className="mb-2 text-xs font-bold uppercase tracking-wider text-accent-text">Seminar</p><h1 className="text-2xl font-extrabold text-ink">{meeting.title}</h1></div>
+      <ul className="space-y-2 rounded-2xl border border-line bg-card p-4 text-sm text-ink-soft">
+        <li>You will see and hear the host’s video and screen.</li>
+        <li>Your camera and microphone stay off and cannot be turned on. Nothing is requested from your browser.</li>
+        <li>You can chat and send reactions.</li>
+        <li>Only the host can see the transcript and summary.</li>
+      </ul>
+      <button type="button" className="btn-primary self-start" onClick={() => setPhase('inroom')}>Join seminar</button>
     </div>
   );
   if (phase === 'prejoin') return (
@@ -235,11 +254,13 @@ export default function MeetingRoom() {
       <LanguageIndicator settings={meeting.languageSettings} languages={languages} />
       <div className="flex-1" />
       {isHost && <span className="rounded-full border border-line-strong px-3 py-1 text-xs font-bold text-accent-text">You are the host</span>}
+      {seminar && <span className="rounded-full border border-line-strong px-3 py-1 text-xs font-bold text-ink-soft">{attendee ? 'Seminar: watching' : 'Seminar'}</span>}
     </header>
   );
-  const hasNotices = rtc.status === 'joining' || rtc.status === 'disconnected' || notice || someoneRecording || recorder.state === 'error' || (isHost && consent && !recording);
+  const hasNotices = attendee || rtc.status === 'joining' || rtc.status === 'disconnected' || notice || someoneRecording || recorder.state === 'error' || (isHost && consent && !recording);
   const notices = hasNotices ? (
     <div className="space-y-2 px-4 pt-2" aria-live="polite">
+      {attendee && <p className="text-sm text-ink-soft">Seminar: only the host can speak or share video. You can chat and send reactions.</p>}
       {rtc.status === 'joining' && <p role="status" className="text-sm text-ink-soft">Connecting…</p>}
       {rtc.status === 'disconnected' && <p role="alert" className="text-sm" style={{ color: 'var(--red-text)' }}>Connection lost. <button type="button" className="underline" onClick={() => window.location.reload()}>Reload to rejoin</button></p>}
       {notice && <p className="text-sm text-ink-soft">{notice}</p>}
@@ -256,17 +277,17 @@ export default function MeetingRoom() {
         panel={panel} onPanel={setPanel} onClose={closePanel}
         chat={<ChatPanel meetingId={meeting.id} selfUserId={user.id} joined={rtc.status === 'joined'} draft={draft} onDraftChange={setDraft} />}
         people={(
-          <ParticipantList people={tiles.map((t) => ({ key: t.key, name: t.name, isSelf: t.isSelf, media: t.media, userId: t.userId }))} hostId={String(meeting.hostId)}
+          <ParticipantList seminar={seminar} people={allTiles.map((t) => ({ key: t.key, name: t.name, isSelf: t.isSelf, media: t.media, userId: t.userId }))} hostId={String(meeting.hostId)}
             isHost={!!isHost} waiting={isHost ? rtc.waiting : []} invite={{ link: meetingLink(meeting.roomCode), code: meeting.roomCode }}
             onAdmit={(id) => hostAct(rtc.admit(id))} onDeny={(id) => hostAct(rtc.deny(id))}
             onMute={(id, kind) => hostAct(rtc.muteUser(id, kind))} onMuteAll={() => hostAct(rtc.muteAll(), 'Everyone else was muted')}
             onRemove={(id) => hostAct(rtc.removeUser(id), 'Removed from the meeting')} />
         )}
         controls={(
-          <MeetingControls audio={audioOn} video={videoOn} canVideo={hasCam} onToggleAudio={onToggleAudio} onToggleVideo={onToggleVideo}
+          <MeetingControls locked={attendee} hidePeople={attendee} audio={audioOn} video={videoOn} canVideo={hasCam} onToggleAudio={onToggleAudio} onToggleVideo={onToggleVideo}
             panel={panel} onPanel={togglePanel} unread={unread} waiting={isHost ? rtc.waiting.length : 0} onLeave={() => leave(false)}
             endButton={isHost ? <button type="button" className="btn-secondary" onClick={() => leave(true)} disabled={busy === 'leaving'}>End for all</button> : null}>
-            <ScreenShareButton supported={canShare} sharing={!!screen} onStart={startShare} onStop={stopShare} />
+            {!attendee && <ScreenShareButton supported={canShare} sharing={!!screen} onStart={startShare} onStop={stopShare} />}
             <ReactionButton onReact={reactions.send} disabled={rtc.status !== 'joined'} />
             {isHost && <RecorderControl state={recorder.state} error={recorder.error} onRequestStart={() => setConsent(true)} onStop={stopRecording} onRetry={recorder.retryUpload} />}
           </MeetingControls>
@@ -276,4 +297,3 @@ export default function MeetingRoom() {
     </>
   );
 }
-
