@@ -5,7 +5,7 @@ const Workspace = require('../models/Workspace');
 const User = require('../models/User');
 const ChatMessage = require('../models/ChatMessage');
 const Recording = require('../models/Recording');
-const { accessQuery } = require('../services/access/authorizedMeetings');
+const { accessQuery, getAccessibleMeeting, canJoinLive } = require('../services/access/authorizedMeetings');
 const svc = require('../services/meetingService');
 
 const oid = z.string().regex(/^[a-f\d]{24}$/i);
@@ -27,6 +27,8 @@ exports.createSchema = z.object({
   // The link/code can be shown BEFORE the meeting exists, so the browser generates the code (12 url-safe chars, same shape as the server's own).
   roomCode: z.string().regex(/^[A-Za-z0-9_-]{12}$/).optional(),
   waitingRoom: z.boolean().optional(),
+  seminar: z.boolean().optional(),
+  openLink: z.boolean().optional(),
   visibility: z.enum(['workspace', 'private']).optional(),
 }).strict();
 exports.patchSchema = z.object({
@@ -47,7 +49,12 @@ const view = (m) => ({
   id: m._id, title: m.title, description: m.description, hostId: m.hostId, workspaceId: m.workspaceId,
   scheduledAt: m.scheduledAt, startedAt: m.startedAt, endedAt: m.endedAt, status: m.status, roomCode: m.roomCode,
   participants: m.participants, invitedUserIds: m.invitedUserIds, languageSettings: m.languageSettings,
-  visibility: m.visibility || 'workspace', waitingRoom: !!m.waitingRoom, recordingConsent: { required: m.recordingConsent?.required, acceptedBy: m.recordingConsent?.acceptedBy }, createdAt: m.createdAt,
+  visibility: m.visibility || 'workspace', seminar: !!m.seminar, openLink: !!m.openLink, waitingRoom: !!m.waitingRoom, recordingConsent: { required: m.recordingConsent?.required, acceptedBy: m.recordingConsent?.acceptedBy }, createdAt: m.createdAt,
+});
+// What someone who may only ATTEND live gets back: no participant list, no invitee ids, nothing about the workspace.
+const liveView = (m) => ({
+  id: m._id, title: m.title, hostId: m.hostId, status: m.status, roomCode: m.roomCode, scheduledAt: m.scheduledAt, startedAt: m.startedAt,
+  languageSettings: { primaryLanguage: m.languageSettings?.primaryLanguage || 'en', autoDetect: false }, seminar: !!m.seminar, waitingRoom: !!m.waitingRoom,
 });
 exports.view = view;
 
@@ -79,7 +86,9 @@ exports.create = asyncHandler(async (req, res) => {
     languageSettings: b.languageSettings,
     roomCode: b.roomCode,                          // undefined -> the model generates one
     waitingRoom: !!b.waitingRoom,
-    visibility: b.visibility || 'private',          // secure by default: only the host and invited people, unless the host shares it with the workspace
+    seminar: !!b.seminar,
+    openLink: !!(b.seminar && b.openLink),           // an open link only makes sense for a seminar
+    visibility: b.seminar ? 'private' : (b.visibility || 'private'),          // secure by default: only the host and invited people, unless the host shares it with the workspace
     ...(b.instant ? { status: 'live', startedAt: new Date() } : {}),
   });
   res.status(201).json({ success: true, meeting: view(meeting), unknownEmails });
@@ -135,15 +144,18 @@ exports.remove = asyncHandler(async (req, res) => {
 });
 
 exports.join = asyncHandler(async (req, res) => {
-  const meeting = await Meeting.findOne(await accessQuery(req.user, { roomCode: req.body.roomCode }));
-  if (!meeting) return res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'You do not have access to this meeting.' });
+  const meeting = await Meeting.findOne({ roomCode: req.body.roomCode, isDeleted: false });
+  // the same answer whether the code is wrong or you are not allowed, so codes can't be probed
+  if (!meeting || !(await canJoinLive(req.user, meeting))) return res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'You do not have access to this meeting.' });
   const c = svc.canJoin(meeting, req.user._id);
   if (!c.ok) return res.status(c.code === 'REMOVED' ? 403 : 409).json({ success: false, code: c.code, message: c.message });
+  const isHost = meeting.hostId.equals(req.user._id);
   // with a waiting room, people are only recorded as participants once the host lets them in (the socket join does that)
-  const waits = meeting.waitingRoom && !meeting.hostId.equals(req.user._id) && !meeting.admittedUserIds.some((i) => i.equals(req.user._id));
-  if (!waits) await svc.markJoined(meeting, req.user._id);
+  const waits = meeting.waitingRoom && !isHost && !meeting.admittedUserIds.some((i) => i.equals(req.user._id));
+  if (!waits && !(meeting.seminar && !isHost)) await svc.markJoined(meeting, req.user._id);       // seminar attendees are not recorded as participants
   const fresh = await Meeting.findById(meeting._id);
-  res.json({ success: true, meeting: view(fresh) });
+  const full = !!(await getAccessibleMeeting(req.user, fresh._id));                              // can this person also open the records?
+  res.json({ success: true, meeting: full ? view(fresh) : liveView(fresh) });
 });
 
 exports.end = asyncHandler(async (req, res) => {
