@@ -388,6 +388,11 @@
   color: var(--text-primary, inherit);
   background: color-mix(in srgb, var(--text-primary, #888) 4%, transparent);
 }
+
+.lp-belt__frame:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
 .lp-belt__viewport {
   flex: 1;
   min-width: 0;
@@ -402,7 +407,12 @@
   animation: lp-marquee 48s linear infinite;
   will-change: transform;
 }
-/* The marquee runs continuously; hovering does not pause it. */
+/* Pause the marquee on pointer hover or keyboard focus, without a visible control. */
+.lp-belt__frame:hover .lp-belt__track,
+.lp-belt__frame:focus-within .lp-belt__track {
+  animation-play-state: paused;
+}
+
 .lp-belt__group {
   display: flex;
   flex-shrink: 0;

@@ -12,7 +12,7 @@ const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
 describe('true-black night theme', () => {
   it('body background is exactly #000000', () => {
     expect(dark['bg-base']).toBe('#000000');
-    expect(read('../src/index.css')).toMatch(/body\{[^}]*background:var\(--bg-base\)/);
+    expect(read('../src/index.css')).toMatch(/body\s*\{[^}]*background:\s*var\(--bg-base\)/);
   });
   it('every night surface is a neutral grey (no navy / slate / blue tint)', () => {
     for (const k of ['bg-base', 'bg-surface', 'bg-card', 'bg-input', 'bg-elevated']) {
@@ -44,5 +44,5 @@ describe('responsive + motion rules', () => {
   });
   it('honors prefers-reduced-motion globally', () => { expect(motion).toMatch(/prefers-reduced-motion: reduce/); expect(motion).toMatch(/animation-duration:\.01ms !important/); });
   it('animations only touch transform/opacity', () => { expect(motion).not.toMatch(/@keyframes[^}]*\b(width|height|top|left)\s*:/); });
-  it('Devanagari fallback is in the base font stack', () => { expect(read('../src/index.css')).toMatch(/'Inter','Noto Sans Devanagari'/); });
+  it('Devanagari fallback is in the base font stack', () => { expect(read('../src/index.css')).toMatch(/'Inter'\s*,\s*'Noto Sans Devanagari'/); });
 });

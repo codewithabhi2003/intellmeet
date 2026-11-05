@@ -1,4 +1,3 @@
-
 import '../../styles/landing.css';
 
 const ITEMS = [
@@ -21,7 +20,7 @@ function Group({ hidden = false }) {
       {ITEMS.map((text) => (
         <li key={text} className="lp-belt__item">
           {text}
-          <span className="lp-belt__sep" aria-hidden />
+          <span className="lp-belt__sep" aria-hidden="true" />
         </li>
       ))}
     </ul>
@@ -35,7 +34,7 @@ export default function MarqueeBelt() {
       role="group"
       aria-label="IntellMeet highlights"
     >
-      <div className="lp-belt__frame">
+      <div className="lp-belt__frame" tabIndex={0}>
         <div className="lp-belt__viewport">
           <div className="lp-belt__track">
             <Group />
