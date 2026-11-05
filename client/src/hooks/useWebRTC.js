@@ -8,7 +8,7 @@ const DEFAULT_MEDIA = { audio: true, video: true, screen: false, recording: fals
 const mk = (p) => ({ socketId: p.socketId, userId: p.userId, name: p.name || 'Participant', media: { ...DEFAULT_MEDIA, ...(p.media || {}) }, stream: null, state: 'new' });
 const desc = (d) => ({ type: d.type, sdp: d.sdp });
 
-export function useWebRTC({ roomCode, localStream, enabled, onHostMute }) {
+export function useWebRTC({ roomCode, localStream, enabled, onHostMute, seminar = false, isHost = false }) {
   const { getSocket } = useSocket();
   const [status, setStatus] = useState('idle');           // idle | joining | waiting | joined | denied | removed | error | ended | disconnected
   const [error, setError] = useState(null);
@@ -16,6 +16,8 @@ export function useWebRTC({ roomCode, localStream, enabled, onHostMute }) {
   const [selfId, setSelfId] = useState(null);
   const [waiting, setWaiting] = useState([]);           // host only: people waiting to be let in
   const muteRef = useRef(onHostMute); muteRef.current = onHostMute;
+  // Seminar: a STAR. The host sends to each attendee (send-only); attendees only receive and never offer or send media.
+  const roleRef = useRef({}); roleRef.current = { attendee: seminar && !isHost, seminarHost: seminar && isHost };
   const pcs = useRef(new Map());
   const pending = useRef(new Map());                       // ICE candidates that arrived before the remote description
   const ice = useRef([]);
@@ -35,10 +37,16 @@ export function useWebRTC({ roomCode, localStream, enabled, onHostMute }) {
     pc.onconnectionstatechange = () => patchPeer(id, { state: pc.connectionState });
     if (withLocal) {
       const ls = local.current;
-      ls?.getTracks().forEach((t) => pc.addTrack(t, ls));
-      // make sure a send-capable video transceiver exists, so screen share can use replaceTrack (no renegotiation)
-      if (!ls?.getAudioTracks().length) pc.addTransceiver('audio', { direction: 'recvonly' });
-      if (!ls?.getVideoTracks().length) pc.addTransceiver('video', { direction: 'sendrecv' });
+      if (roleRef.current.seminarHost) {
+        // send-only: the offer itself forbids attendees from sending anything back
+        ls?.getTracks().forEach((t) => pc.addTransceiver(t, { direction: 'sendonly', streams: [ls] }));
+        if (!ls?.getVideoTracks().length) pc.addTransceiver('video', { direction: 'sendonly' });   // so a screen share can still use replaceTrack
+      } else {
+        ls?.getTracks().forEach((t) => pc.addTrack(t, ls));
+        // make sure a send-capable video transceiver exists, so screen share can use replaceTrack (no renegotiation)
+        if (!ls?.getAudioTracks().length) pc.addTransceiver('audio', { direction: 'recvonly' });
+        if (!ls?.getVideoTracks().length) pc.addTransceiver('video', { direction: 'sendrecv' });
+      }
     }
     return pc;
   }, [getSocket, patchPeer]);
@@ -62,7 +70,8 @@ export function useWebRTC({ roomCode, localStream, enabled, onHostMute }) {
     await pc.setRemoteDescription(data);
     const ls = local.current;
     ls?.getTracks().forEach((t) => pc.addTrack(t, ls));
-    pc.getTransceivers?.().forEach((t) => { if (!t.sender.track && t.direction === 'recvonly' && t.receiver.track?.kind === 'video') t.direction = 'sendrecv'; });
+    if (!roleRef.current.attendee)                                           // a seminar attendee stays receive-only
+      pc.getTransceivers?.().forEach((t) => { if (!t.sender.track && t.direction === 'recvonly' && t.receiver.track?.kind === 'video') t.direction = 'sendrecv'; });
     await flushIce(from, pc);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
@@ -87,7 +96,7 @@ export function useWebRTC({ roomCode, localStream, enabled, onHostMute }) {
     const connections = pcs.current, queued = pending.current;   // stable Map instances, captured for the cleanup
     let cancelled = false;
     const handlers = {
-      'peer:joined': ({ peer }) => addPeer(peer),
+      'peer:joined': ({ peer }) => { addPeer(peer); if (roleRef.current.seminarHost) makeOffer(peer.socketId).catch(() => {}); },   // the host offers to each new attendee
       'peer:left': ({ socketId }) => dropPeer(socketId),
       'rtc:offer': (m) => onOffer(m).catch(() => {}),
       'rtc:answer': (m) => onAnswer(m).catch(() => {}),
@@ -111,7 +120,7 @@ export function useWebRTC({ roomCode, localStream, enabled, onHostMute }) {
         setSelfId(ack.selfId);
         ack.peers.forEach(addPeer);
         setStatus('joined');
-        for (const p of ack.peers) await makeOffer(p.socketId);     // new joiner offers to existing peers
+        if (!roleRef.current.attendee) for (const p of ack.peers) await makeOffer(p.socketId);     // new joiner offers to existing peers (a seminar attendee waits for the host's offer)
       } catch (e) {
         if (!cancelled) { setError({ message: e?.response?.data?.message || 'Could not join the room.' }); setStatus('error'); }
       }
