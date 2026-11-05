@@ -14,7 +14,7 @@ import { DEFAULT_LANGUAGE_SETTINGS, buildCreatePayload, isEmail, parseEmails } f
 export default function CreateMeeting() {
   const navigate = useNavigate();
   const [ref, setRef] = useState({ workspaces: null, languages: null, error: '' });
-  const [form, setForm] = useState({ title: '', description: '', mode: 'now', scheduledAt: '', workspaceId: '', emails: '', waitingRoom: false, visibility: 'private', languageSettings: DEFAULT_LANGUAGE_SETTINGS });
+  const [form, setForm] = useState({ title: '', description: '', mode: 'now', scheduledAt: '', workspaceId: '', emails: '', waitingRoom: false, visibility: 'private', seminar: false, openLink: true, languageSettings: DEFAULT_LANGUAGE_SETTINGS });
   const [roomCode] = useState(generateRoomCode);          // made now, so the link and code can be copied before the meeting exists
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -69,11 +69,32 @@ export default function CreateMeeting() {
             )}
           </fieldset>
 
+          <fieldset className="space-y-2">
+            <legend className="label">Meeting type</legend>
+            {[[false, 'Meeting', 'Everyone can use their camera and microphone.'], [true, 'Seminar', 'Only you present. Attendees watch, chat and react; their camera and microphone are disabled.']].map(([v, title, hint]) => (
+              <label key={String(v)} className={`flex min-h-[44px] cursor-pointer items-start gap-3 rounded-xl border p-3 ${form.seminar === v ? 'border-[var(--accent)] bg-accent-soft' : 'border-line'}`}>
+                <input type="radio" name="kind" className="mt-1 h-4 w-4 accent-[var(--btn-bg)]" checked={form.seminar === v} onChange={() => setForm((f) => ({ ...f, seminar: v }))} />
+                <span><span className="block text-sm font-medium text-ink">{title}</span><span className="block text-xs text-ink-muted">{hint}</span></span>
+              </label>
+            ))}
+            {form.seminar && (
+              <div className="space-y-3 rounded-xl border border-line bg-surface p-3">
+                <div className="flex items-start gap-3">
+                  <input id="open-link" type="checkbox" className="mt-1 h-5 w-5 accent-[var(--btn-bg)]" checked={form.openLink} onChange={(e) => setForm((f) => ({ ...f, openLink: e.target.checked }))} />
+                  <label htmlFor="open-link" className="text-sm text-ink">Anyone with the link can attend
+                    <span className="block text-xs text-ink-muted">They need an IntellMeet account, but not a workspace or an invite. Turn it off to allow only people you invite or your workspace.</span></label>
+                </div>
+                <p className="text-xs text-ink-muted">Only you can see a seminar’s transcript, summary and recording. Each attendee is a separate video connection from your browser, so seminars suit small audiences.</p>
+              </div>
+            )}
+          </fieldset>
+
           <div>
             <label className="label" htmlFor="ws">Workspace</label>
             <select id="ws" className="field" value={form.workspaceId} onChange={set('workspaceId')}>{ref.workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
             </div>
 
+          {!form.seminar && (
           <fieldset className="space-y-2">
             <legend className="label">Who can see this meeting's transcript and summary?</legend>
             {[['private', 'Only me and the people I invite', 'Other workspace members cannot open it, search it, or see its action items.'], ['workspace', 'Everyone in the workspace', 'Every member of the workspace can open the meeting and its records.']].map(([v, title, hint]) => (
@@ -83,6 +104,7 @@ export default function CreateMeeting() {
               </label>
             ))}
           </fieldset>
+          )}
           <div>
             <label className="label" htmlFor="inv">Invite by email (optional)</label>
             <textarea id="inv" rows={2} className="field" placeholder="name@company.com, other@company.com" value={form.emails} onChange={set('emails')} aria-invalid={!!badEmails.length} aria-describedby="inv-h" />
