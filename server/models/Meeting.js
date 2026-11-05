@@ -24,6 +24,10 @@ const meetingSchema = new Schema({
   // Who can open the transcript, summary and chat: 'private' = the host, invited people and participants only;
   // 'workspace' = also every member of the workspace. (Meetings saved before this field existed behave as 'workspace'.)
   visibility: { type: String, enum: ['workspace', 'private'], default: 'workspace' },
+  // Seminar mode: only the host speaks/presents; attendees can watch, chat and react. The transcript, summary, tasks and recording
+  // of a seminar belong to the host alone. openLink: any signed-in IntellMeet user with the link/code may attend (no workspace or invite needed).
+  seminar: { type: Boolean, default: false },
+  openLink: { type: Boolean, default: false },
   waitingRoom: { type: Boolean, default: false },                    // non-hosts wait until the host lets them in
   admittedUserIds: [{ type: Schema.Types.ObjectId, ref: 'User' }],   // let in by the host (stay admitted for this meeting)
   removedUserIds: [{ type: Schema.Types.ObjectId, ref: 'User' }],    // removed by the host: cannot rejoin this meeting
