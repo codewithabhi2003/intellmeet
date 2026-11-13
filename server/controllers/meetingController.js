@@ -64,13 +64,11 @@ const resolveEmails = async (emails = []) => {
   return { ids: users.map((u) => u._id), unknownEmails: emails.filter((e) => !found.has(e.toLowerCase())) };
 };
 
-exports.rtcConfig = (req, res) => {
-  const iceServers = [];
-  const stun = (process.env.STUN_URLS || '').split(',').map((s) => s.trim()).filter(Boolean);
-  if (stun.length) iceServers.push({ urls: stun });
-  if (process.env.TURN_URL) iceServers.push({ urls: process.env.TURN_URL, username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL });
-  res.json({ success: true, iceServers });
-};
+// ICE servers for WebRTC. The list is built in meetingService.rtcConfig: STUN_URLS and TURN_URL work exactly as before, and a TURN provider
+// (Cloudflare or Metered) can be added through .env for people on restrictive networks.
+exports.rtcConfig = asyncHandler(async (req, res) => {
+  res.json({ success: true, iceServers: await svc.rtcConfig() });
+});
 
 exports.create = asyncHandler(async (req, res) => {
   const b = req.body;
