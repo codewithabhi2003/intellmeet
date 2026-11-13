@@ -21,6 +21,7 @@ import { useRecorder } from '../hooks/useRecorder';
 import { useSocket } from '../hooks/useSocket';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { labelFor } from '../lib/reactions';
+import { AUDIO_CONSTRAINTS } from '../lib/rtcQuality';
 import { meetingLink } from '../lib/meetingLink';
 import * as aiService from '../services/aiService';
 import * as meetingService from '../services/meetingService';
@@ -68,11 +69,11 @@ export default function MeetingRoom() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     if (mode === 'none') { setStream(new MediaStream()); setAudioOn(false); setVideoOn(false); return; }
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
+      const s = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS, video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
       setStream(s); setAudioOn(true); setVideoOn(true);
     } catch (e) {
       try {
-        const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const s = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS });
         setStream(s); setAudioOn(true); setVideoOn(false); setNotice('Your camera is unavailable. You can still join with audio.');
       } catch (e2) { setMediaError(mediaErrorText(e2 || e)); }
     }
