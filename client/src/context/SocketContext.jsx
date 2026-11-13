@@ -10,7 +10,14 @@ export function SocketProvider({ children }) {
   const ref = useRef(null);
   const disconnect = useCallback(() => { ref.current?.disconnect(); ref.current = null; }, []);
   const getSocket = useCallback(() => {
-    if (!ref.current) ref.current = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', { withCredentials: true, transports: ['websocket'] });
+    if (!ref.current) {
+      ref.current = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
+        withCredentials: true,
+        transports: ['websocket'],
+        reconnectionDelay: 500,        // after a drop, try again after 0.5 s (Socket.IO default: 1 s) ...
+        reconnectionDelayMax: 3000,    // ... and never wait more than 3 s between tries (default: 5 s), so a call comes back sooner
+      });
+    }
     return ref.current;
   }, []);
   useEffect(() => { if (!user) disconnect(); }, [user, disconnect]);
