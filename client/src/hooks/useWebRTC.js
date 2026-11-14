@@ -12,7 +12,8 @@ import {
 // Renegotiating a LIVE connection (ICE restart after a network drop) can start from either side, so it uses "perfect negotiation":
 // the side that originally offered is impolite and wins a collision, the side that answered is polite and yields.
 const DEFAULT_MEDIA = { audio: true, video: true, screen: false, recording: false };
-const mk = (p) => ({ socketId: p.socketId, userId: p.userId, name: p.name || 'Participant', media: { ...DEFAULT_MEDIA, ...(p.media || {}) }, stream: null, state: 'new', quality: 'good' });
+// `since` and `stale`: a person who has not connected after GHOST_MS is most likely the leftover of an old connection (see below)
+const mk = (p) => ({ socketId: p.socketId, userId: p.userId, name: p.name || 'Participant', avatarUrl: p.avatarUrl || null, media: { ...DEFAULT_MEDIA, ...(p.media || {}) }, stream: null, state: 'new', quality: 'good', since: Date.now(), stale: false });
 const desc = (d) => ({ type: d.type, sdp: d.sdp });
 // The DTLS fingerprint identifies one RTCPeerConnection: an ICE restart keeps it, a brand-new connection always has a new one.
 // That is how an incoming offer is told apart (renegotiation vs. new connection) without adding anything to the signaling messages.
@@ -22,6 +23,7 @@ const TICK_MS = 2500;     // how often every connection's link quality is sample
 const BLIP_MS = 2500;     // 'disconnected' often heals on its own: wait this long before restarting ICE
 const RETRY_MS = 6000;    // while a connection stays down, try again this often
 const MAX_TRIES = 8;      // then stop; the peer has most likely left (the server will tell us with peer:left)
+const GHOST_MS = 20000;   // somebody who has not connected after this long is marked `stale`: the page hides them until they connect
 
 function closePc(pc) {
   if (!pc) return;
@@ -117,7 +119,24 @@ export function useWebRTC({ roomCode, localStream, enabled, onHostMute, seminar 
     return () => { off = true; document.removeEventListener('visibilitychange', take); lock?.release().catch(() => {}); };
   }, [enabled, roomCode]);
 
-  const addPeer = useCallback((p) => setPeers((l) => (l.some((x) => x.socketId === p.socketId) ? l.map((x) => (x.socketId === p.socketId && p.name ? { ...x, name: p.name, userId: p.userId, media: { ...x.media, ...(p.media || {}) } } : x)) : [...l, mk(p)])), []);
+  // Mark people who never got connected (GHOST_MS). State only changes when something actually changed, so this does not re-render every tick.
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const t = setInterval(() => setPeers((l) => {
+      const now = Date.now();
+      let changed = false;
+      const next = l.map((p) => {
+        const stale = p.state !== 'connected' && !p.stream && now - p.since > GHOST_MS;
+        if (stale === p.stale) return p;
+        changed = true;
+        return { ...p, stale };
+      });
+      return changed ? next : l;
+    }), 4000);
+    return () => clearInterval(t);
+  }, [enabled]);
+
+  const addPeer = useCallback((p) => setPeers((l) => (l.some((x) => x.socketId === p.socketId) ? l.map((x) => (x.socketId === p.socketId && p.name ? { ...x, name: p.name, userId: p.userId, avatarUrl: p.avatarUrl ?? x.avatarUrl, media: { ...x.media, ...(p.media || {}) } } : x)) : [...l, mk(p)])), []);
   const patchPeer = useCallback((id, patch) => setPeers((l) => l.map((p) => (p.socketId === id ? { ...p, ...patch } : p))), []);
   const dropPeer = useCallback((id) => { closePc(pcs.current.get(id)); pcs.current.delete(id); pending.current.delete(id); chains.current.delete(id); setPeers((l) => l.filter((p) => p.socketId !== id)); }, []);
 
@@ -286,6 +305,7 @@ export function useWebRTC({ roomCode, localStream, enabled, onHostMute, seminar 
     const connections = pcs.current, queued = pending.current, chainMap = chains.current;   // stable Map instances, captured for the cleanup
     let cancelled = false;
     let joined = false;                                                      // true after the first answer from the server
+    let over = false;                                                        // the meeting ended, or we were removed / refused: never rejoin by ourselves after that
     const resetConnections = () => { connections.forEach(closePc); connections.clear(); queued.clear(); chainMap.clear(); setPeers([]); };
     // network came back or changed type: restart ICE on every live connection so media finds the new path
     const kick = () => { if (!roleRef.current.attendee) connections.forEach((pc, id) => restartIce(id, pc)); };
@@ -298,28 +318,46 @@ export function useWebRTC({ roomCode, localStream, enabled, onHostMute, seminar 
       'rtc:answer': (m) => onAnswer(m).catch(() => {}),
       'rtc:ice': (m) => onIce(m).catch(() => {}),
       'media:state': ({ socketId, media }) => patchPeer(socketId, { media }),
-      'meeting:ended': () => setStatus('ended'),
+      'meeting:ended': () => { over = true; setStatus('ended'); },
       'lobby:update': ({ waiting: w }) => setWaiting(Array.isArray(w) ? w : []),
       'lobby:admitted': () => { setStatus('joining'); join(); },       // the host let us in: join the room for real
-      'lobby:denied': () => setStatus('denied'),
-      'host:removed': () => { resetConnections(); setStatus('removed'); },
+      'lobby:denied': () => { over = true; setStatus('denied'); },
+      'host:removed': () => { over = true; resetConnections(); setStatus('removed'); },
       'host:force-mute': ({ kind }) => muteRef.current?.(kind),         // the page turns the track off; the person can switch it back on
-      disconnect: () => { if (!cancelled) setStatus((s) => (s === 'ended' ? s : 'disconnected')); },
+      // The server asks "are you still there?" before it drops an OLDER session of the same person (see server/sockets/presence.js).
+      // Answering keeps a second tab or device alive; a dead connection cannot answer and is cleaned up.
+      'presence:ping': (reply) => { if (typeof reply === 'function') reply(); },
+      // This session was dropped while the tab was frozen or offline, but the connection itself survived: join again.
+      'presence:evicted': () => { if (!cancelled && !over) { resetConnections(); join(); } },
+      disconnect: (reason) => {
+        if (cancelled) return;
+        setStatus((s) => (s === 'ended' || s === 'removed' || s === 'denied' ? s : 'disconnected'));
+        // when the SERVER closes the connection, Socket.IO does not retry by itself: do it here
+        if (reason === 'io server disconnect' && !over) setTimeout(() => { if (!cancelled && !over && !socket.connected) socket.connect(); }, 800);
+      },
       // Socket.IO reconnected on its own. The server dropped us from the room when the socket died and we have a new socket id,
       // so everyone's connection to us is gone: rejoin and rebuild, exactly like a first join.
-      connect: () => { if (joined && !cancelled) { resetConnections(); join(); } },
+      connect: () => { if (joined && !cancelled && !over) { resetConnections(); setStatus('joining'); join(); } },
     };
-    const join = async () => {
+    const join = async (attempt = 0) => {
       try {
         try { const cfg = await meetingService.rtcConfig(); if (Array.isArray(cfg) && cfg.length) ice.current = cfg; } catch { /* keep the last good list */ }
         if (!ice.current.length) ice.current = FALLBACK_ICE;               // STUN only: better than failing to start
         const ack = await new Promise((res) => {
-          const t = setTimeout(() => res(null), 10000);                    // never hang forever if the socket dies mid-join
+          const t = setTimeout(() => res(null), 8000);                     // never hang forever if the socket dies mid-join
           socket.emit('room:join', { roomCode }, (a) => { clearTimeout(t); res(a); });
         });
         if (cancelled) return;
+        // No answer at all, or a server hiccup (the free server was busy or still waking up): try again before giving up.
+        // A real refusal (full room, no access, removed...) is shown at once.
+        if ((!ack || ack.code === 'SERVER_ERROR') && attempt < 3) {
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+          if (!cancelled) await join(attempt + 1);
+          return;
+        }
         if (!ack?.ok) { setError(ack || { message: 'Could not join the room.' }); setStatus('error'); return; }
         joined = true;
+        socket.emit('presence:hello');                                   // tells the server this tab can answer "presence:ping"
         if (ack.waiting) { setStatus('waiting'); return; }               // waiting room: the host has to let us in
         setSelfId(ack.selfId);
         ack.peers.forEach(addPeer);
