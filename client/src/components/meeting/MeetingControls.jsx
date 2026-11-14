@@ -8,13 +8,13 @@ const RED = '#e5484d';
 const keyboardFocus = (el) => { try { return el.matches(':focus-visible'); } catch { return true; } };
 
 // One round control button. `off` = the thing it controls is switched off (muted camera, ...): shown in red.
-function Ctrl({ id, label, hint, off = false, active = false, disabled = false, badge = 0, onClick, expanded, pressed, children }) {
+function Ctrl({ id, label, hint, off = false, active = false, disabled = false, badge = 0, badgeId, controls, onClick, expanded, pressed, children }) {
   const style = off ? { background: 'rgba(229,72,77,.16)', color: '#f87171' } : active ? { background: 'var(--accent-soft)', color: 'var(--accent-text)' } : undefined;
   return (
-    <button type="button" id={id} className="btn-icon relative" style={style} onClick={onClick} disabled={disabled} aria-label={label} title={hint ? `${label} (${hint})` : label} aria-expanded={expanded} aria-pressed={pressed}>
+    <button type="button" id={id} className="btn-icon relative" style={style} onClick={onClick} disabled={disabled} aria-label={label} title={hint ? `${label} (${hint})` : label} aria-expanded={expanded} aria-controls={controls} aria-pressed={pressed}>
       {children}
       {badge > 0 && (
-        <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full px-1 text-center text-[10px] font-bold leading-[18px] text-white" style={{ background: RED }} aria-hidden>{badge > 9 ? '9+' : badge}</span>
+        <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full px-1 text-center text-[10px] font-bold leading-[18px] text-white" style={{ background: RED }} data-testid={badgeId} aria-hidden>{badge > 9 ? '9+' : badge}</span>
       )}
     </button>
   );
@@ -78,15 +78,15 @@ export default function MeetingControls({
 
         {/* centre: everything except Leave */}
         <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-2 sm:gap-3 md:flex-none">
-          <Ctrl label={audio ? 'Mute microphone' : 'Unmute microphone'} off={!audio} disabled={locked} onClick={onToggleAudio}>{audio ? <Mic size={20} aria-hidden /> : <MicOff size={20} aria-hidden />}</Ctrl>
-          <Ctrl label={!canVideo ? 'No camera found' : video ? 'Turn camera off' : 'Turn camera on'} off={!video} disabled={locked || !canVideo} onClick={onToggleVideo}>{video ? <Video size={20} aria-hidden /> : <VideoOff size={20} aria-hidden />}</Ctrl>
+          <Ctrl label={locked ? 'Microphone is off. Only the host speaks.' : audio ? 'Mute microphone' : 'Unmute microphone'} off={!audio} pressed={!audio} disabled={locked} onClick={onToggleAudio}>{audio ? <Mic size={20} aria-hidden /> : <MicOff size={20} aria-hidden />}</Ctrl>
+          <Ctrl label={locked ? 'Camera is off. Only the host shows video.' : video ? 'Turn camera off' : 'Turn camera on'} hint={!locked && !canVideo ? 'no camera found' : undefined} off={!video} pressed={!video} disabled={locked || !canVideo} onClick={onToggleVideo}>{video ? <Video size={20} aria-hidden /> : <VideoOff size={20} aria-hidden />}</Ctrl>
 
           {children}
 
           <span className="mx-0.5 hidden h-7 w-px bg-line sm:block" aria-hidden />
 
-          <Ctrl id="toggle-chat" label={unread ? `Chat, ${unread} unread` : 'Chat'} active={panel === 'chat'} badge={unread} expanded={panel === 'chat'} onClick={() => onPanel('chat')}><MessageSquare size={20} aria-hidden /></Ctrl>
-          {!hidePeople && <Ctrl id="toggle-people" label={waiting ? `Participants, ${waiting} waiting` : 'Participants'} active={panel === 'people'} badge={waiting} expanded={panel === 'people'} onClick={() => onPanel('people')}><Users size={20} aria-hidden /></Ctrl>}
+          <Ctrl id="toggle-chat" label={unread ? `Chat, ${unread} unread` : 'Chat'} active={panel === 'chat'} badge={unread} badgeId="unread-badge" controls="room-panel" expanded={panel === 'chat'} onClick={() => onPanel('chat')}><MessageSquare size={20} aria-hidden /></Ctrl>
+          {!hidePeople && <Ctrl id="toggle-people" label={waiting ? `Participants, ${waiting} waiting` : 'Participants'} active={panel === 'people'} badge={waiting} badgeId="waiting-badge" controls="room-panel" expanded={panel === 'people'} onClick={() => onPanel('people')}><Users size={20} aria-hidden /></Ctrl>}
           {onToggleFullscreen && (
             <Ctrl id="toggle-fullscreen" label={fullscreen ? 'Exit full screen' : 'Full screen'} hint="F" active={fullscreen} pressed={fullscreen} onClick={onToggleFullscreen}>
               {fullscreen ? <Minimize size={20} aria-hidden /> : <Maximize size={20} aria-hidden />}
