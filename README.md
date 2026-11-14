@@ -1,26 +1,61 @@
 # IntellMeet — AI-Powered Meeting & Collaboration Platform
 
-IntellMeet is a full-stack meeting and collaboration application with browser-based video meetings, real-time chat, screen sharing, consent-first recording, transcription, translation, AI-generated summaries, reviewable action items, task management, and search across past meetings.
+IntellMeet is a full-stack MERN application for video meetings that stay useful after the call ends: browser-based WebRTC video, real-time chat, screen sharing, consent-first recording, transcription, translation, AI summaries with reviewable action items, task management, and natural-language search across past meetings.
 
-This repository contains both the React frontend and Node.js backend. They can be deployed independently.
+The repository contains the React frontend (`client/`) and the Node.js backend (`server/`). They are deployed independently.
+
+- **Frontend:** Vercel
+- **Backend:** Render (free tier, kept awake with an uptime monitor)
+- **Database:** MongoDB Atlas
+
+---
 
 ## Features
 
-- User authentication and protected routes
-- Workspaces, meeting creation, meeting history, and participant permissions
-- WebRTC audio/video and screen sharing
-- Socket.IO chat, signaling, presence, and reactions
-- Consent-first recording and audio upload
-- AI transcription using Groq
-- Translation, summaries, action items, and embeddings using Google Gemini
-- Search across authorized meeting content with source citations
-- Profile settings, language preferences, responsive UI, and day/night themes
+### Meetings
+- Instant and scheduled meetings, a shareable meeting link and room code, workspaces, invitations by email
+- Pre-join screen with camera/microphone preview
+- WebRTC audio and video (mesh), screen sharing, emoji reactions
+- Real-time chat with persisted history and a per-sender rate limit
+- Adaptive video quality that reacts to the network, with a "weak connection" indicator
+- Microphone processing for clearer voice (noise suppression, echo cancellation, auto gain)
+- Profile-picture avatars shown in a tile when someone's camera is off
+- Responsive meeting room: full-screen video stage, side panel for chat and participants, 2-column grid on phones, pinned layout when someone shares their screen
+- Leave controls: participants get a simple Leave button; the host gets a menu with **End meeting for all**, **Leave meeting**, and **Cancel**
+
+### Host controls and access
+- Waiting room (lobby) with admit / deny
+- Mute a participant, turn off a camera, mute all, remove a participant
+- Seminar mode: only the host speaks and shows video; the transcript, summary and recording are private to the host
+- Open-link or invite-only visibility
+- Meeting access is recomputed on every request; it is never cached
+
+### Reliability
+- Automatic reconnect with ICE restart and perfect-negotiation signaling
+- Stale-session cleanup: when a device reconnects, its old socket is probed and removed so you do not see duplicate "Connecting…" tiles of yourself or others
+- A user can keep a second live device in the same room; it is labelled "(other device)"
+
+### AI features
+- Transcription with Groq (post-meeting, not live)
+- Translation, summaries, action items and embeddings with Google Gemini
+- Action items are saved as reviewable tasks; owners and deadlines stay empty unless stated in the transcript
+- Hybrid search (keyword + semantic, merged with Reciprocal Rank Fusion) with citations that open the original meeting at the exact moment
+- Any feature without its API key shows a clear "Not configured" state instead of fake output
+
+### Accounts and platform
+- JWT authentication, protected routes, roles, login-attempt tracking, security event log
+- Profile settings with avatar upload and language preferences
+- Day and true-black night themes with no flash on load
+
+---
 
 ## Technology stack
 
-**Client:** React 18, Vite, React Router, Tailwind CSS, Axios, Socket.IO Client, WebRTC, Framer Motion, Vitest, Testing Library.
+**Client:** React 18, Vite, React Router, Tailwind CSS (custom design tokens), Framer Motion, lucide-react, react-hot-toast, Axios, Socket.IO Client, WebRTC, Vitest, Testing Library.
 
-**Server:** Node.js, Express, MongoDB/Mongoose, Socket.IO, JWT, Zod, Multer, FFmpeg, Groq, Google Gemini, Vitest.
+**Server:** Node.js, Express, MongoDB/Mongoose, Socket.IO, JWT, Zod, Multer, Cloudinary (avatars), FFmpeg, Groq, Google Gemini, Vitest.
+
+---
 
 ## Architecture
 
@@ -28,407 +63,185 @@ This repository contains both the React frontend and Node.js backend. They can b
 Browser
   └── client/ (Vercel)
        ├── HTTPS REST API requests ──────┐
-       ├── Socket.IO real-time events ───┤
-       └── WebRTC media connections      │
+       ├── Socket.IO events (signaling,  │
+       │   chat, presence, host actions) ┤
+       └── WebRTC media (peer to peer)   │
                                          v
                               server/ (Render)
                                  ├── MongoDB Atlas
                                  ├── Groq API (transcription)
-                                 └── Google Gemini API (AI/language features)
+                                 └── Google Gemini API (AI / language / search)
 ```
 
-Socket.IO handles signaling and real-time application events; it does not relay all WebRTC media itself. TURN may be needed on restrictive networks.
+Socket.IO carries signaling and application events only; media flows directly between browsers. Room presence is held in memory, so the server runs as a **single process**.
+
+---
 
 ## Repository structure
 
-The tree lists source files, tests, configuration, and assets. Generated folders such as `node_modules/`, `dist/`, and `.git/` are omitted.
+Generated folders (`node_modules/`, `dist/`, `.git/`) are omitted.
 
 ```text
-intellmeet/
-├── client/
-│   ├── public/
-│   │   ├── screenshots/
-│   │   │   ├── meeting-search.png
-│   │   │   ├── meeting-summary.png
-│   │   │   ├── meeting-tasks.png
-│   │   │   └── meeting-transcript.png
-│   │   └── videos/
-│   │       ├── intellmeet-hero-dark.jpg
-│   │       ├── intellmeet-hero-dark.mp4
-│   │       ├── intellmeet-hero-light.jpg
-│   │       └── intellmeet-hero-light.mp4
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── common/
-│   │   │   │   ├── AppShell.jsx
-│   │   │   │   ├── AuthLayout.jsx
-│   │   │   │   ├── Avatar.jsx
-│   │   │   │   ├── BentoGrid.jsx
-│   │   │   │   ├── EmptyState.jsx
-│   │   │   │   ├── Modal.jsx
-│   │   │   │   ├── Navbar.jsx
-│   │   │   │   ├── NotConfigured.jsx
-│   │   │   │   ├── ProtectedRoute.jsx
-│   │   │   │   ├── Sidebar.jsx
-│   │   │   │   ├── Skeleton.jsx
-│   │   │   │   └── StatusBadge.jsx
-│   │   │   ├── landing/
-│   │   │   │   ├── AuroraBackground.jsx
-│   │   │   │   ├── DemoVideo.jsx
-│   │   │   │   ├── Features.jsx
-│   │   │   │   ├── FinalCta.jsx
-│   │   │   │   ├── GlassPage.jsx
-│   │   │   │   ├── Hero.jsx
-│   │   │   │   ├── HeroMock.jsx
-│   │   │   │   ├── HowItWorks.jsx
-│   │   │   │   ├── LandingFooter.jsx
-│   │   │   │   ├── LandingNav.jsx
-│   │   │   │   ├── LandingPage.example.jsx
-│   │   │   │   ├── Logo.jsx
-│   │   │   │   ├── MarqueeBelt.jsx
-│   │   │   │   ├── Reveal.jsx
-│   │   │   │   ├── Trust.jsx
-│   │   │   │   └── useThemeMode.js
-│   │   │   ├── language/
-│   │   │   │   ├── LanguageIndicator.jsx
-│   │   │   │   ├── LanguageSelect.jsx
-│   │   │   │   ├── LanguageSettingsPanel.jsx
-│   │   │   │   └── TranslationToggle.jsx
-│   │   │   ├── meeting/
-│   │   │   │   ├── ChatPanel.jsx
-│   │   │   │   ├── ConsentBanner.jsx
-│   │   │   │   ├── MeetingControls.jsx
-│   │   │   │   ├── ParticipantList.jsx
-│   │   │   │   ├── PreJoin.jsx
-│   │   │   │   ├── ReactionButton.jsx
-│   │   │   │   ├── ReactionLayer.jsx
-│   │   │   │   ├── RecorderControl.jsx
-│   │   │   │   ├── RoomLayout.jsx
-│   │   │   │   ├── ScreenShareButton.jsx
-│   │   │   │   ├── VideoGrid.jsx
-│   │   │   │   └── VideoTile.jsx
-│   │   │   ├── search/
-│   │   │   │   ├── AnswerCard.jsx
-│   │   │   │   ├── ExampleQuestions.jsx
-│   │   │   │   ├── InsufficientEvidence.jsx
-│   │   │   │   ├── SearchBar.jsx
-│   │   │   │   ├── SearchFilters.jsx
-│   │   │   │   └── SourceCard.jsx
-│   │   │   ├── summary/
-│   │   │   │   ├── ActionItemList.jsx
-│   │   │   │   ├── SummaryLanguageSelect.jsx
-│   │   │   │   └── SummaryPanel.jsx
-│   │   │   ├── tasks/
-│   │   │   │   ├── TaskBoard.jsx
-│   │   │   │   └── TaskCard.jsx
-│   │   │   └── transcript/
-│   │   │       ├── ProcessingState.jsx
-│   │   │       ├── TranscriptionControls.jsx
-│   │   │       ├── TranscriptSegment.jsx
-│   │   │       └── TranscriptViewer.jsx
-│   │   ├── context/
-│   │   │   ├── AuthContext.jsx
-│   │   │   ├── SocketContext.jsx
-│   │   │   └── ThemeContext.jsx
-│   │   ├── hooks/
-│   │   │   ├── useAIStatus.js
-│   │   │   ├── useAuth.js
-│   │   │   ├── useMeetingSearch.js
-│   │   │   ├── usePoll.js
-│   │   │   ├── useReactions.js
-│   │   │   ├── useRecorder.js
-│   │   │   ├── useSocket.js
-│   │   │   ├── useTheme.js
-│   │   │   ├── useTranscript.js
-│   │   │   └── useWebRTC.js
-│   │   ├── lib/
-│   │   │   ├── aiHelpers.js
-│   │   │   ├── avatar.js
-│   │   │   ├── meetingForm.js
-│   │   │   └── reactions.js
-│   │   ├── pages/
-│   │   │   ├── CreateMeeting.jsx
-│   │   │   ├── Dashboard.jsx
-│   │   │   ├── Home.jsx
-│   │   │   ├── Landing.jsx
-│   │   │   ├── Login.jsx
-│   │   │   ├── MeetingDetail.jsx
-│   │   │   ├── MeetingHistory.jsx
-│   │   │   ├── MeetingRoom.jsx
-│   │   │   ├── MeetingSearch.jsx
-│   │   │   ├── NotFound.jsx
-│   │   │   ├── Register.jsx
-│   │   │   ├── Settings.jsx
-│   │   │   ├── Tasks.jsx
-│   │   │   └── Workspaces.jsx
-│   │   ├── services/
-│   │   │   ├── aiService.js
-│   │   │   ├── api.js
-│   │   │   ├── authService.js
-│   │   │   ├── meetingAiService.js
-│   │   │   ├── meetingService.js
-│   │   │   ├── searchService.js
-│   │   │   ├── taskService.js
-│   │   │   ├── userService.js
-│   │   │   └── workspaceService.js
-│   │   ├── styles/
-│   │   │   ├── bento.css
-│   │   │   ├── glass.css
-│   │   │   ├── landing.css
-│   │   │   ├── motion.css
-│   │   │   ├── reactions.css
-│   │   │   └── tokens.css
-│   │   ├── App.jsx
-│   │   ├── index.css
-│   │   └── main.jsx
-│   ├── tests/
-│   │   ├── aiHelpers.test.js
-│   │   ├── aiPanels.test.jsx
-│   │   ├── appShell.test.jsx
-│   │   ├── landing.test.jsx
-│   │   ├── meetingDetail.test.jsx
-│   │   ├── meetingForm.test.js
-│   │   ├── meetingUi.test.jsx
-│   │   ├── noFlash.test.js
-│   │   ├── profileSettings.test.jsx
-│   │   ├── reactions.test.jsx
-│   │   ├── roomLayout.test.jsx
-│   │   ├── searchUi.test.jsx
-│   │   ├── securityScan.test.js
-│   │   ├── setup.js
-│   │   ├── tokens.test.js
-│   │   ├── ui.test.jsx
-│   │   └── webrtc.test.jsx
-│   ├── .env.example
-│   ├── eslint.config.js
-│   ├── index.html
-│   ├── package.json
-│   ├── postcss.config.js
-│   ├── tailwind.config.js
-│   └── vite.config.js
-│
+IntellMeet/
 ├── server/
-│   ├── config/
-│   │   ├── aiConfig.js
-│   │   ├── cors.js
-│   │   └── db.js
-│   ├── controllers/
-│   │   ├── aiController.js
-│   │   ├── authController.js
-│   │   ├── meetingController.js
-│   │   ├── meetingSearchController.js
-│   │   ├── taskController.js
-│   │   ├── userController.js
-│   │   └── workspaceController.js
-│   ├── middleware/
-│   │   ├── aiRateLimiter.js
-│   │   ├── authMiddleware.js
-│   │   ├── errorHandler.js
-│   │   ├── meetingAccess.js
-│   │   ├── roleMiddleware.js
-│   │   ├── uploadAudio.js
-│   │   ├── uploadAvatar.js
-│   │   └── validate.js
-│   ├── models/
-│   │   ├── ChatMessage.js
-│   │   ├── index.js
-│   │   ├── Meeting.js
-│   │   ├── Recording.js
-│   │   ├── Summary.js
-│   │   ├── Task.js
-│   │   ├── Transcript.js
-│   │   ├── TranscriptSegment.js
-│   │   ├── Translation.js
-│   │   ├── User.js
-│   │   └── Workspace.js
-│   ├── routes/
-│   │   ├── ai.js
-│   │   ├── auth.js
-│   │   ├── languages.js
-│   │   ├── meetings.js
-│   │   ├── meetingSearch.js
-│   │   ├── summary.js
-│   │   ├── tasks.js
-│   │   ├── transcription.js
-│   │   ├── translation.js
-│   │   ├── users.js
-│   │   └── workspaces.js
-│   ├── scripts/
-│   │   ├── backfillEmbeddings.js
-│   │   ├── ensureIndexes.js
-│   │   ├── seedAdmin.js
-│   │   └── seedDemo.js
+│   ├── config/          aiConfig · cloudinary · cors · db
+│   ├── controllers/     ai · auth · meeting · meetingSearch · task · user · workspace
+│   ├── middleware/      aiRateLimiter · auth · errorHandler · meetingAccess · meetingLiveAccess ·
+│   │                    role · uploadAudio · uploadAvatar · validate
+│   ├── models/          ChatMessage · LoginAttempt · Meeting · Recording · SecurityEvent · Summary ·
+│   │                    Task · Transcript · TranscriptSegment · Translation · User · Workspace
+│   ├── routes/          ai · auth · languages · meetings · meetingSearch · summary · tasks ·
+│   │                    transcription · translation · users · workspaces
+│   ├── scripts/         backfillEmbeddings · ensureIndexes · seedAdmin · seedDemo
 │   ├── services/
-│   │   ├── access/
-│   │   │   └── authorizedMeetings.js
-│   │   ├── ai/
-│   │   │   ├── providers/
-│   │   │   │   ├── geminiProvider.js
-│   │   │   │   └── groqProvider.js
-│   │   │   ├── audioService.js
-│   │   │   ├── embeddingService.js
-│   │   │   ├── languages.js
-│   │   │   ├── meetingSearchService.js
-│   │   │   ├── promptTemplates.js
-│   │   │   ├── summaryService.js
-│   │   │   ├── transcriptionService.js
-│   │   │   └── translationService.js
-│   │   └── meetingService.js
-│   ├── sockets/
-│   │   ├── chat.js
-│   │   ├── index.js
-│   │   ├── presence.js
-│   │   ├── reactions.js
-│   │   └── signaling.js
-│   ├── storage/
-│   │   └── avatars/                 # Runtime uploads; don't commit real user files
-│   ├── tests/
-│   │   ├── languages.test.js
-│   │   ├── phase1.test.js
-│   │   ├── phase2.test.js
-│   │   ├── phase3.test.js
-│   │   ├── phase4.test.js
-│   │   ├── pipeline.live.js
-│   │   ├── profile.test.js
-│   │   ├── reactions.test.js
-│   │   └── security.test.js
-│   ├── utils/
-│   │   ├── aiErrors.js
-│   │   ├── apiResponse.js
-│   │   ├── generateToken.js
-│   │   ├── languagePrefs.js
-│   │   └── realtime.js
-│   ├── .env.example
-│   ├── app.js
-│   ├── eslint.config.js
-│   ├── package.json
-│   ├── server.js
-│   ├── vitest.config.js
-│   └── vitest.live.config.js
+│   │   ├── access/      authorizedMeetings        (single source of truth for who can see a meeting)
+│   │   ├── ai/          providers (gemini, groq) · audio · embedding · languages · meetingSearch ·
+│   │   │                promptTemplates · summary · transcription · translation
+│   │   ├── meetingService.js
+│   │   └── security.js
+│   ├── sockets/         chat · host · index · presence · reactions · signaling
+│   ├── tests/           automated tests + pipeline.live.js (live provider test)
+│   ├── utils/           aiErrors · apiResponse · generateToken · languagePrefs · realtime · session
+│   ├── app.js · server.js · eslint.config.js · vitest.config.js · vitest.live.config.js · package.json
 │
-├── .gitignore
-└── README.md
+└── client/
+    ├── public/          screenshots · videos
+    ├── src/
+    │   ├── components/
+    │   │   ├── common/      AppShell · AuthLayout · Avatar · BentoGrid · EmptyState · Modal · Navbar ·
+    │   │   │                NotConfigured · ProtectedRoute · Sidebar · Skeleton · StatusBadge
+    │   │   ├── landing/     marketing page sections
+    │   │   ├── language/    LanguageIndicator · LanguageSelect · LanguageSettingsPanel · TranslationToggle
+    │   │   ├── meeting/     ChatPanel · ConsentBanner · MeetingControls · MeetingLinkBox · ParticipantList ·
+    │   │   │                PreJoin · ReactionButton · ReactionLayer · RecorderControl · RoomLayout ·
+    │   │   │                ScreenShareButton · VideoGrid · VideoTile
+    │   │   ├── search/      AnswerCard · ExampleQuestions · InsufficientEvidence · SearchBar · SearchFilters · SourceCard
+    │   │   ├── summary/     ActionItemList · SummaryLanguageSelect · SummaryPanel
+    │   │   ├── tasks/       TaskBoard · TaskCard
+    │   │   └── transcript/  ProcessingState · TranscriptionControls · TranscriptSegment · TranscriptViewer
+    │   ├── context/     Auth · Socket · Theme
+    │   ├── hooks/       useAIStatus · useAuth · useMeetingSearch · usePoll · useReactions · useRecorder ·
+    │   │                useSocket · useTheme · useTranscript · useWebRTC
+    │   ├── lib/         aiHelpers · avatar · meetingForm · meetingLink · micProcessing · reactions ·
+    │   │                rtcQuality · securityEvents
+    │   ├── pages/       CreateMeeting · Dashboard · Home · Landing · Login · MeetingDetail · MeetingHistory ·
+    │   │                MeetingRoom · MeetingSearch · NotFound · Register · Settings · Tasks · Workspaces
+    │   ├── services/    one file per API group
+    │   ├── styles/      bento · glass · landing · motion · reactions · tokens
+    │   └── App.jsx · index.css · main.jsx
+    ├── tests/           frontend tests and setup.js
+    └── eslint.config.js · index.html · package.json · postcss.config.js · tailwind.config.js · vercel.json · vite.config.js
 ```
+
+---
 
 ## Getting started
 
 ### Requirements
-
 - Node.js 20+ and npm
 - MongoDB Atlas or a local MongoDB instance
-- Groq API key for transcription (optional)
-- Google Gemini API key for translation, summaries, search answers, and embeddings (optional)
+- Optional: Groq API key (transcription), Google Gemini API key (translation, summaries, search answers, embeddings), Cloudinary account (avatar uploads)
 
-### 1. Clone the repository
+### 1. Clone
 
 ```bash
 git clone <YOUR_GITHUB_REPOSITORY_URL>
-cd intellmeet
+cd IntellMeet
 ```
 
-### 2. Start the backend
+### 2. Backend
 
 ```bash
 cd server
 npm install
 ```
 
-Create a local `.env` from the template.
+Create `.env` from the template.
 
 **PowerShell**
 ```powershell
 Copy-Item .env.example .env
 ```
 
-**macOS/Linux**
+**macOS / Linux**
 ```bash
 cp .env.example .env
 ```
 
-Set at least `MONGO_URI` and a strong `JWT_SECRET` (32+ characters). Add AI provider keys to enable the associated features.
+Set at least `MONGO_URI` and a `JWT_SECRET` of 32+ characters. Add provider keys to enable the matching features. Then:
 
 ```bash
 npm run dev
 ```
 
-The API defaults to `http://localhost:5000`.
+The API runs on `http://localhost:5000`. Optional: `npm run seed:admin` creates the admin user from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
-### 3. Start the frontend
+### 3. Frontend
 
-Open a second terminal from the repository root:
+In a second terminal:
 
 ```bash
 cd client
 npm install
 ```
 
-Create the frontend environment file:
-
-**PowerShell**
-```powershell
-Copy-Item .env.example .env
-```
-
-**macOS/Linux**
-```bash
-cp .env.example .env
-```
-
-For local development, configure:
+Create `client/.env`:
 
 ```env
 VITE_API_URL=http://localhost:5000/api
 VITE_SOCKET_URL=http://localhost:5000
 ```
 
-Start the Vite server:
-
 ```bash
 npm run dev
 ```
 
-The frontend normally runs at `http://localhost:5173`.
+The app runs on `http://localhost:5173`. To try a call, open the meeting link in a second browser profile or an incognito window with a different account.
+
+---
 
 ## Environment variables
 
-The `.env.example` files document the full set of supported settings. Never commit real `.env` files or secrets.
+Real `.env` files must never be committed. Only non-secret values may use the `VITE_` prefix, because they are bundled into the browser code.
 
 ### Client
 
 | Variable | Purpose |
 |---|---|
-| `VITE_API_URL` | REST API base URL. |
-| `VITE_SOCKET_URL` | Socket.IO server URL. |
-
-Only non-secret values should use the `VITE_` prefix because they are bundled into browser code. Never put provider API keys in the client.
+| `VITE_API_URL` | REST API base URL |
+| `VITE_SOCKET_URL` | Socket.IO server origin |
 
 ### Server
 
 | Variable | Purpose |
 |---|---|
-| `PORT` | API port; default `5000`. |
-| `NODE_ENV` | Runtime mode; set to `production` in production. |
-| `CLIENT_URL` | Allowed frontend origin(s) for CORS. |
-| `MONGO_URI` | MongoDB connection string; required. |
-| `JWT_SECRET` | Token-signing secret; required, use 32+ random characters. |
-| `JWT_EXPIRE` | Token lifetime; default `7d` in project configuration. |
-| `STORAGE_DIR` | Recording storage directory; default `./storage`. |
-| `GROQ_API_KEY` | Enables transcription. |
-| `GEMINI_API_KEY` | Enables Gemini language and AI features. |
-| `TRANSCRIPTION_MODEL`, `LANGUAGE_MODEL` | Provider model configuration; see `.env.example` for defaults. |
-| `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS` | Embedding configuration. |
-| `STUN_URLS`, `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | WebRTC ICE/TURN configuration. |
-| `MAX_AUDIO_MB`, `MAX_AUDIO_MINUTES` | Audio upload and processing limits. |
-| `MAX_UPLOAD_MB`, `MAX_AVATAR_MB` | Recording and avatar upload limits. |
-| `MAX_ROOM_PEERS` | Mesh room size limit. |
-| `SEARCH_MAX_QUERY_CHARS`, `SEARCH_MAX_SEGMENTS`, `SEARCH_MAX_CONTEXT_CHARS` | Meeting-search bounds. |
-| `SEARCH_VECTOR_CANDIDATES`, `SEARCH_MIN_SIMILARITY`, `ATLAS_VECTOR_INDEX` | Semantic search settings. |
-| `AI_RATE_LIMIT_PER_MIN`, `AI_REQUEST_TIMEOUT_MS` | AI rate limit and provider timeout. |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Used by the admin seed script only. |
+| `PORT` | API port, default `5000` |
+| `NODE_ENV` | Set to `production` when deployed |
+| `CLIENT_URL` | Allowed frontend origin(s) for CORS |
+| `MONGO_URI` | MongoDB connection string (required) |
+| `JWT_SECRET` | Token signing secret, 32+ random characters (required) |
+| `JWT_EXPIRE` | Token lifetime |
+| `STORAGE_DIR` | Recording storage directory, default `./storage` |
+| `GROQ_API_KEY` | Enables transcription |
+| `GEMINI_API_KEY` | Enables translation, summaries, search answers and embeddings |
+| `TRANSCRIPTION_MODEL`, `LANGUAGE_MODEL` | Provider model names |
+| `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS` | Embedding settings |
+| `STUN_URLS`, `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | WebRTC ICE servers |
+| `MAX_AUDIO_MB`, `MAX_AUDIO_MINUTES` | Audio upload and processing limits |
+| `MAX_UPLOAD_MB`, `MAX_AVATAR_MB` | Recording and avatar upload limits |
+| `MAX_ROOM_PEERS` | Mesh room size limit |
+| `SEARCH_MAX_QUERY_CHARS`, `SEARCH_MAX_SEGMENTS`, `SEARCH_MAX_CONTEXT_CHARS` | Search bounds |
+| `SEARCH_VECTOR_CANDIDATES`, `SEARCH_MIN_SIMILARITY`, `ATLAS_VECTOR_INDEX` | Semantic search settings |
+| `AI_RATE_LIMIT_PER_MIN`, `AI_REQUEST_TIMEOUT_MS` | AI rate limit and provider timeout |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Used only by the admin seed script |
 
-## Useful scripts
+Cloudinary credentials for avatar uploads are read in `server/config/cloudinary.js`; `server/.env.example` lists the exact variable names.
 
-Run commands from `client/` or `server/` as appropriate.
+---
+
+## Scripts
+
+Run from `client/` or `server/`.
 
 ### Client
 
@@ -438,23 +251,25 @@ Run commands from `client/` or `server/` as appropriate.
 | `npm run build` | Production build into `dist/` |
 | `npm run preview` | Preview the production build |
 | `npm test` | Run frontend tests |
-| `npm run lint` | Run ESLint |
+| `npm run lint` | ESLint |
 
 ### Server
 
 | Command | Purpose |
 |---|---|
-| `npm run dev` | Start server with development auto-reload |
+| `npm run dev` | Start with auto-reload |
 | `npm start` | Start the API |
-| `npm test` | Run backend tests; database tests need `TEST_MONGO_URI` |
-| `npm run test:live` | Live provider tests; needs provider keys and `LIVE_AUDIO_PATH` |
-| `npm run lint` | Run ESLint |
-| `npm run seed:admin` | Create an admin using configured seed credentials |
+| `npm test` | Backend tests (database tests need `TEST_MONGO_URI`) |
+| `npm run test:live` | Live provider tests (need provider keys and `LIVE_AUDIO_PATH`) |
+| `npm run lint` | ESLint |
+| `npm run seed:admin` | Create the admin user |
 | `npm run seed:demo` | Development-only sample data |
 | `npm run db:ensure-indexes` | Create database indexes |
-| `npm run db:backfill-embeddings` | Backfill missing transcript embeddings |
+| `npm run db:backfill-embeddings` | Embed transcript segments that have no embedding yet |
 
-Check each folder's `package.json` for the exact scripts available in the current checkout.
+Check each `package.json` for the exact scripts in your checkout.
+
+---
 
 ## Testing
 
@@ -464,55 +279,59 @@ cd client
 npm test
 npm run build
 
-# Backend (from a separate terminal)
+# Backend (separate terminal)
 cd server
 npm test
 ```
 
-Set `TEST_MONGO_URI` to a dedicated test database for database-backed tests. Never use production data for tests. Live provider tests call external APIs and may use provider quota.
+Use a dedicated database for `TEST_MONGO_URI`, never production data. Live provider tests call external APIs and use provider quota. The frontend pipeline ("Frontend Checks") runs the client tests, so run `npm test` in `client/` before pushing.
+
+---
 
 ## Deployment
 
 ### Frontend on Vercel
-
-1. Import this repository into Vercel.
-2. Set **Root Directory** to `client`.
-3. Select Vite, use `npm run build` as the build command and `dist` as the output directory.
-4. Set `VITE_API_URL` to the deployed backend API URL (for example, `https://YOUR-API-DOMAIN/api`).
-5. Set `VITE_SOCKET_URL` to the deployed backend origin (for example, `https://YOUR-API-DOMAIN`).
-6. Deploy or redeploy after setting the variables.
+1. Import the repository and set **Root Directory** to `client`.
+2. Framework: Vite; build command `npm run build`; output directory `dist`.
+3. Set `VITE_API_URL` (for example `https://YOUR-API/api`) and `VITE_SOCKET_URL` (`https://YOUR-API`).
+4. Deploy. `vercel.json` handles single-page-app routing.
 
 ### Backend on Render
+1. Create a Web Service from the same repository with **Root Directory** `server`.
+2. Build command `npm install`; start command `npm start`.
+3. Set `MONGO_URI`, `JWT_SECRET`, `CLIENT_URL` (your Vercel origin) and any AI or WebRTC variables.
+4. Run **one instance only**, because room presence is in memory.
+5. Free instances sleep when idle. Point an uptime monitor at the API's health URL to keep it awake and avoid a long first load.
 
-1. Create a Web Service from the same repository.
-2. Set **Root Directory** to `server`.
-3. Use `npm install` as the build command and `npm start` as the start command.
-4. Configure `MONGO_URI`, `JWT_SECRET`, `CLIENT_URL`, and any required AI/WebRTC variables in Render's environment settings.
-5. Set `CLIENT_URL` to the deployed Vercel origin.
+**Storage:** files on hosted services may be ephemeral. Use persistent or object storage for recordings and keep backups separate from the primary database.
 
-**Persistent storage:** local files on hosted services may be ephemeral. Use persistent storage or object storage for durable recordings and user uploads. Keep backups separate from the primary database.
+---
 
 ## Security and privacy
 
-- Never commit `.env` files, API keys, database credentials, JWT secrets, tokens, or private user uploads.
-- Keep AI provider keys on the backend.
-- Use a strong unique production `JWT_SECRET`.
-- Restrict database network access and use a least-privilege MongoDB user.
-- Configure CORS to trusted frontend origins only.
-- Use a dedicated test database.
-- Obtain and communicate consent before recording meetings.
-- Review the data policies of AI providers before sending meeting recordings or transcripts to them.
-- If a secret was ever committed, rotate it; deleting the file in a later commit does not remove it from Git history.
+- Never commit `.env` files, keys, database credentials, tokens or private uploads. If a secret was ever committed, rotate it; deleting the file does not remove it from Git history.
+- AI provider keys live only on the server.
+- Search permissions are enforced inside the database query, and every citation is rebuilt from server records before it is returned.
+- Original transcripts are never modified; translations are stored separately and labelled.
+- Requests are validated with Zod; `$`-prefixed keys are rejected; AI output is schema-validated.
+- Auth rate limiting and a security-event log are included.
+- Recording needs explicit consent before it starts; participants see a visible recording notice.
+- Review the data terms of Groq and Google before sending confidential recordings or transcripts to them.
+
+---
 
 ## Known limitations
 
-- Mesh WebRTC is intended for small meetings (configured limit is around six peers); larger meetings generally need an SFU, and restrictive networks may need TURN.
-- Transcription is post-meeting, not live.
-- Speaker identification is not currently included.
-- The in-app vector-search fallback is designed for smaller workloads; larger deployments may need Atlas Vector Search or a dedicated vector database.
-- AI features require valid provider keys and may be affected by provider quotas and availability.
-- Meeting recordings and transcripts can be sent to Groq or Google for processing when those features are used; review their current terms before using confidential data.
+- **Mesh WebRTC** suits small meetings (default limit about six people). Larger meetings need an SFU.
+- **TURN:** the default setup uses STUN only. Peers behind strict firewalls or symmetric NATs may fail to connect until a TURN server is configured through `TURN_URL`, `TURN_USERNAME` and `TURN_CREDENTIAL`.
+- **Single server process:** room presence and lobbies are held in memory.
+- Transcription is post-meeting, not live, and there is no speaker identification.
+- The in-app vector search fallback suits smaller workloads; larger deployments should use Atlas Vector Search or a dedicated vector store.
+- AI features depend on provider keys, quotas and availability.
+- Render's free tier sleeps when idle; a monitor reduces but does not remove cold starts.
+
+---
 
 ## License
 
-Add a `LICENSE` file if you plan to distribute or open-source this project. Without a license, others do not automatically receive permission to reuse the code.
+Add a `LICENSE` file if you plan to distribute or open-source this project. Without one, others do not automatically have permission to reuse the code.
