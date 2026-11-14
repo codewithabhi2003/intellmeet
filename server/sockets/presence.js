@@ -1,4 +1,5 @@
 const { z } = require('zod');
+const mongoose = require('mongoose');
 const Meeting = require('../models/Meeting');
 const { canJoinLive } = require('../services/access/authorizedMeetings');
 const svc = require('../services/meetingService');
@@ -52,6 +53,75 @@ const leave = async (io, socket) => {
 };
 exports.leave = leave;
 
+// ---- stale sessions ---------------------------------------------------------------------------------------------------------------
+// Every time a phone or a laptop loses its signal and reconnects, it gets a NEW socket id, while the OLD socket can stay in the room for
+// up to ~45 s (until Socket.IO notices that the connection is dead). Everybody else then sees the same person two or three times as
+// "Connecting…" tiles, and those leftovers also use up places in the room.
+// So when a person joins, their OLDER sessions are asked "are you still there?". A session that does not answer is removed on the spot.
+// A second tab or device that still answers is left alone. Only sessions that said "presence:hello" are ever judged (the client sends it
+// after joining), so an older client that cannot answer is never thrown out by mistake.
+const PROBE_MS = 1500;
+const socketOf = (io, id) => io.sockets?.sockets?.get?.(id) || io.sockets?.connected?.[id] || null;
+const isAlive = (io, id) => new Promise((resolve) => {
+  const s = socketOf(io, id);
+  if (!s || s.connected === false) return resolve(false);          // the socket is already gone
+  if (!s.data?.canPing) return resolve(true);                      // cannot be asked: never judged
+  let done = false, timer = null;
+  const finish = (v) => { if (done) return; done = true; clearTimeout(timer); resolve(v); };
+  timer = setTimeout(() => finish(false), PROBE_MS);
+  try { s.emit('presence:ping', () => finish(true)); } catch { finish(false); }
+});
+
+const evictSession = (io, roomCode, id, seminar) => {
+  const room = rooms.get(roomCode);
+  const peer = room?.get(id);
+  if (!peer) return;
+  room.delete(id);
+  if (!room.size) rooms.delete(roomCode);
+  const s = socketOf(io, id);
+  if (s) {
+    s.leave(`meeting:${roomCode}`);
+    s.data.roomCode = null; s.data.meetingId = null; s.data.isHost = false; s.data.seminar = false;
+    s.emit('presence:evicted');                                    // if that tab was only frozen and wakes up, it joins again by itself
+  }
+  const gone = { socketId: id, userId: peer.userId };
+  if (seminar && !peer.isHost) hostSockets(roomCode).forEach((h) => io.to(h).emit('peer:left', gone));
+  else io.to(`meeting:${roomCode}`).emit('peer:left', gone);
+};
+
+const dropDeadSessions = async (io, roomCode, userId, exceptId, seminar) => {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+  const mine = [...room.values()].filter((p) => p.userId === userId && p.socketId !== exceptId);
+  if (!mine.length) return;
+  const alive = await Promise.all(mine.map((p) => isAlive(io, p.socketId)));
+  mine.forEach((p, i) => { if (!alive[i]) evictSession(io, roomCode, p.socketId, seminar); });
+};
+
+// The same for the waiting room: one person must not appear twice in the host's "waiting" list.
+const dropDeadWaiting = async (io, roomCode, userId, exceptId) => {
+  const lobby = lobbies.get(roomCode);
+  if (!lobby) return;
+  const mine = [...lobby.values()].filter((w) => w.userId === userId && w.socketId !== exceptId);
+  if (!mine.length) return;
+  const alive = await Promise.all(mine.map((w) => isAlive(io, w.socketId)));
+  mine.forEach((w, i) => {
+    if (alive[i]) return;
+    lobby.delete(w.socketId);
+    const s = socketOf(io, w.socketId);
+    if (s) { s.data.lobbyRoom = null; s.data.lobbyHostId = null; }
+  });
+};
+
+// The profile picture shown in a tile while someone's camera is off. Read fresh on every join, so a new picture is used right away.
+const avatarOf = async (socket) => {
+  try {
+    const u = await mongoose.models.User?.findById(socket.user._id).select('avatarUrl').lean();
+    if (u) return u.avatarUrl || null;
+  } catch { /* fall back to what the handshake loaded */ }
+  return socket.user.avatarUrl || null;
+};
+
 exports.register = (io, socket) => {
   socket.on('room:join', async (payload, ack = () => {}) => {
     try {
@@ -68,21 +138,27 @@ exports.register = (io, socket) => {
       const seminar = !!meeting.seminar;
       const attendee = seminar && !isHost;
       const admitted = meeting.admittedUserIds.some((i) => i.equals(socket.user._id));
+      const userId = String(socket.user._id);
       if (meeting.waitingRoom && !isHost && !admitted) {
         // Waiting room: park this socket in the lobby. It is NOT in the meeting room, so it can't hear, signal, chat or react.
+        await dropDeadWaiting(io, roomCode, userId, socket.id);
         const lobby = lobbies.get(roomCode) || new Map();
-        lobby.set(socket.id, { socketId: socket.id, userId: String(socket.user._id), name: socket.user.name });
+        lobby.set(socket.id, { socketId: socket.id, userId, name: socket.user.name });
         lobbies.set(roomCode, lobby);
         socket.data.lobbyRoom = roomCode; socket.data.lobbyHostId = String(meeting.hostId);
         pushLobby(io, roomCode, meeting.hostId);
         return ack({ ok: true, waiting: true });
       }
 
+      await dropDeadSessions(io, roomCode, userId, socket.id, seminar);                       // leftovers of this person's old connections
+      const avatarUrl = await avatarOf(socket);
+      // no "await" between the capacity check and room.set below, so two people joining at the same moment cannot both squeeze in
       const room = rooms.get(roomCode) || new Map();
       if (seminar ? room.size >= 1 + MAX_ATTENDEES() : room.size >= MAX())
         return ack({ ok: false, code: 'ROOM_FULL', message: seminar ? `This seminar is full (${MAX_ATTENDEES()} attendees).` : `Mesh calls support up to ${MAX()} participants.` });
-      const peer = { socketId: socket.id, userId: String(socket.user._id), name: socket.user.name, isHost,
-        media: { audio: !attendee, video: !attendee, screen: false, recording: false } };        // seminar attendees never have camera or microphone
+      const peer = { socketId: socket.id, userId, name: socket.user.name, isHost,
+        media: { audio: !attendee, video: !attendee, screen: false, recording: false },        // seminar attendees never have camera or microphone
+        ...(avatarUrl ? { avatarUrl } : {}) };
       room.set(socket.id, peer); rooms.set(roomCode, room);
       socket.data.roomCode = roomCode; socket.data.meetingId = meeting._id; socket.data.isHost = isHost; socket.data.seminar = seminar;
       socket.join(`meeting:${roomCode}`);
@@ -98,6 +174,9 @@ exports.register = (io, socket) => {
       ack({ ok: false, code: e.name === 'ZodError' ? 'VALIDATION_ERROR' : 'SERVER_ERROR', message: 'Could not join the room.' });
     }
   });
+
+  // The client says it can answer "presence:ping" (see useWebRTC). Only such sessions can be told apart from a dead connection.
+  socket.on('presence:hello', () => { socket.data.canPing = true; });
 
   socket.on('room:leave', async (_p, ack = () => {}) => { await leave(io, socket); leaveLobby(io, socket); ack({ ok: true }); });
 
