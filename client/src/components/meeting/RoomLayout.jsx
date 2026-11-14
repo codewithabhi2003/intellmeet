@@ -8,7 +8,8 @@ const ease = [0.22, 1, 0.36, 1];
 // The meeting screen: top bar, a video stage that fills ALL remaining space, and a bottom bar.
 // With the side panel closed the video takes the whole page between the two bars. Opening chat (or the participant list)
 // slides a panel in from the right: beside the video on large screens, over it (with a backdrop) on small ones.
-export default function RoomLayout({ header, notices, stage, overlay, panel, onPanel, onClose, chat, people, controls }) {
+// `immersive` (full screen): the header and controls are floating over the video, so the stage drops its padding and the page goes black behind the tiles.
+export default function RoomLayout({ header, notices, stage, overlay, panel, onPanel, onClose, chat, people, controls, immersive = false }) {
   useEffect(() => {
     if (!panel) return undefined;
     const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose?.(panel); };   // the reaction picker handles its own Escape first
@@ -17,11 +18,11 @@ export default function RoomLayout({ header, notices, stage, overlay, panel, onP
   }, [panel, onClose]);
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-base">
+    <div className={`flex h-dvh flex-col overflow-hidden ${immersive ? 'bg-black' : 'bg-base'}`}>
       {header}
       {notices}
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <main className="relative min-w-0 flex-1 p-2 sm:p-3">
+        <main className={`relative min-w-0 flex-1 ${immersive ? 'p-1' : 'p-2 sm:p-3'}`}>
           <div className="h-full min-h-0">{stage}</div>
           {overlay}
         </main>
